@@ -6,7 +6,7 @@
 		"dockerfile": "Dockerfile"
 	},
 	"features": {
-		"ghcr.io/msclock/features/vcpkg:1": {}
+		"ghcr.io/msclock/features/vcpkg:2": {}
 	},
 	"customizations": {
 		"vscode": {
