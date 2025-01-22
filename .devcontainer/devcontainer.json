@@ -12,10 +12,16 @@
 	"customizations": {
 		"vscode": {
 			"settings": {
-				"terminal.integrated.shell.linux": "/bin/bash"
+				"terminal.integrated.shell.linux": "/bin/bash",
+				"cmake.generator": "Ninja",
+				"cmake.configureSettings": {
+					"CMAKE_TOOLCHAIN_FILE": "/usr/local/vcpkg/scripts/buildsystems/vcpkg.cmake"
+				}
 			},
 			"extensions": ["ms-vscode.cpptools",
 				"ms-vscode.cmake-tools",
+				"ms-vscode.cpptools-extension-pack",
+				"ms-azuretools.vscode-docker",
 				"bierner.markdown-mermaid"]
 		}
 	}

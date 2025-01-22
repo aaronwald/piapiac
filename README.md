@@ -3,7 +3,9 @@
 ```mermaid
 graph TD;
 
-grpc-->store
-store-->websocket
-
+grpc-->|epoll| piapiac
+piapiac<-->duckdb
+piapiac-->|epoll| websocket
+tui<-->|rest?| piapiac
+piapiac<-->|mqtt| mosquitto
 ```
