@@ -14,15 +14,21 @@
 			"settings": {
 				"terminal.integrated.shell.linux": "/bin/bash",
 				"cmake.generator": "Ninja",
+				"editor.renderWhitespace": "all",
+				"editor.renderControlCharacters": true,
+				"editor.renderIndentGuides": true,
+				"files.eol": "\n",
 				"cmake.configureSettings": {
 					"CMAKE_TOOLCHAIN_FILE": "/usr/local/vcpkg/scripts/buildsystems/vcpkg.cmake"
 				}
 			},
-			"extensions": ["ms-vscode.cpptools",
+			"extensions": [
+				"ms-vscode.cpptools",
 				"ms-vscode.cmake-tools",
 				"ms-vscode.cpptools-extension-pack",
 				"ms-azuretools.vscode-docker",
-				"bierner.markdown-mermaid"]
+				"bierner.markdown-mermaid"
+			]
 		}
 	}
 }
