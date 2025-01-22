@@ -10,7 +10,10 @@ endif()
 
 include(FetchContent)
 
-# BEGIN olalla
+# set(CMAKE_INSTALL_RPATH "/usr/local/lib")
+set(CMAKE_BUILD_RPATH "/usr/local/lib")
+
+# BEGIN piapiac
 add_executable(piapiac "src/main.cpp")
 target_include_directories(piapiac PUBLIC "include" "src" "duckdb/include")
 set(piapiac_debug_flags -Wpedantic -Wno-deprecated-declarations -fno-omit-frame-pointer -g -O0 -DSPDLOG_DEBUG_ON=1 -DSPDLOG_TRACE_ON=1 )
