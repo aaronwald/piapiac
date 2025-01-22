@@ -6,7 +6,6 @@
 		"dockerfile": "Dockerfile"
 	},
 	"features": {
-		"ghcr.io/devcontainers-contrib/features/ninja-asdf:2": {},
 		"ghcr.io/msclock/features/vcpkg:1": {}
 	},
 	"customizations": {
@@ -20,7 +19,8 @@
 				"editor.renderIndentGuides": true,
 				"files.eol": "\n",
 				"cmake.configureSettings": {
-					"CMAKE_TOOLCHAIN_FILE": "/usr/local/vcpkg/scripts/buildsystems/vcpkg.cmake"
+					"CMAKE_TOOLCHAIN_FILE": "/usr/local/vcpkg/scripts/buildsystems/vcpkg.cmake",
+				    "CMAKE_MAKE_PROGRAM": "/usr/bin/ninja"
 				}
 			},
 			"extensions": [
