@@ -10,16 +10,6 @@ endif()
 
 include(FetchContent)
 
-# BEGIN DuckDB
-FetchContent_Declare(
-  DuckDB
-  GIT_REPOSITORY https://github.com/duckdb/duckdb
-  GIT_TAG        v1.1.3
-)
-
-FetchContent_MakeAvailable(DuckDB)
-# END DuckDB
-
 # BEGIN olalla
 add_executable(piapiac "src/main.cpp")
 target_include_directories(piapiac PUBLIC "include" "src" "duckdb/include")
