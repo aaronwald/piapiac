@@ -22,10 +22,12 @@ FetchContent_MakeAvailable(DuckDB)
 
 # BEGIN olalla
 add_executable(piapiac "src/main.cpp")
+target_include_directories(piapiac PUBLIC "include" "src" "duckdb/include")
 set(piapiac_debug_flags -Wpedantic -Wno-deprecated-declarations -fno-omit-frame-pointer -g -O0 -DSPDLOG_DEBUG_ON=1 -DSPDLOG_TRACE_ON=1 )
 set(piapiac_release_flags  -Wpedantic -Wno-deprecated-declarations -fno-omit-frame-pointer -g -O3 -DSPDLOG_DEBUG_ON=0 -DSPDLOG_TRACE_ON=0 )
 target_compile_options(piapiac PRIVATE "$<IF:$<CONFIG:Debug>,${piapiac_debug_flags},${piapiac_release_flags}>")
 target_compile_options(piapiac PRIVATE -Werror -Wall -Wextra)
+target_link_options(piapiac PRIVATE -fsanitize=address -fsanitize=undefined)
 target_link_libraries(piapiac duckdb)
 # END piapiac
 
