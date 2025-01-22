@@ -22,6 +22,9 @@ RUN export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends libnuma-dev libyaml-dev libssl-dev ninja-build clang-15 linux-perf clang-16 libclang-rt-16-dev
 
 
-RUN wget https://github.com/duckdb/duckdb/releases/download/v1.1.3/libduckdb-linux-amd64.zip \
-    && unzip libduckdb-linux-amd64.zip  -d /usr/local/lib \
-    && rm libduckdb-linux-amd64.zip 
+WORKDIR /tmp
+RUN git clone https://github.com/duckdb/duckdb
+WORKDIR /tmp/duckdb
+RUN GEN=ninja make
+RUN cp /tmp/duckdb/src/include/duckdb_extension.h /tmp/duckdb/src/include/duckdb.h /tmp/duckdb/src/include/duckdb.hpp /usr/local/include/
+RUN cp /tmp/duckdb/build/release/src/libduckdb.so /tmp/duckdb/build/release/src/libduckdb_static.a  /usr/local/lib/
