@@ -13,13 +13,16 @@ include(FetchContent)
 # set(CMAKE_INSTALL_RPATH "/usr/local/lib")
 set(CMAKE_BUILD_RPATH "/usr/local/lib")
 
+file(GLOB_RECURSE PIAPIAC_SRC ${PROJECT_SOURCE_DIR}/src/*.cpp)
 # BEGIN piapiac
-add_executable(piapiac "src/main.cpp")
+add_executable(piapiac ${PIAPIAC_SRC})
+target_include_directories(piapiac PRIVATE "include")
 set(piapiac_debug_flags -Wpedantic -Wno-deprecated-declarations -fno-omit-frame-pointer -g -O0 -DSPDLOG_DEBUG_ON=1 -DSPDLOG_TRACE_ON=1 )
 set(piapiac_release_flags  -Wpedantic -Wno-deprecated-declarations -fno-omit-frame-pointer -g -O3 -DSPDLOG_DEBUG_ON=0 -DSPDLOG_TRACE_ON=0 )
+
 target_compile_options(piapiac PRIVATE "$<IF:$<CONFIG:Debug>,${piapiac_debug_flags},${piapiac_release_flags}>")
-target_compile_options(piapiac PRIVATE -Werror -Wall -Wextra)
-target_link_options(piapiac PRIVATE -fsanitize=address -fsanitize=undefined -v)
+target_compile_options(piapiac PRIVATE -Werror -Wall -Wextra ) # -v for verbose
+target_link_options(piapiac PRIVATE -fsanitize=address -fsanitize=undefined -v) # -v for verbose
 target_link_libraries(piapiac duckdb)
 # END piapiac
 

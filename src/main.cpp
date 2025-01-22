@@ -1,43 +1,50 @@
 #include <iostream>
 #include <duckdb.h>
+#include <piapiac.hpp>
+#include <stdlib.h>
 
-int main() {
-	duckdb_database db = NULL;
-	duckdb_connection con = NULL;
+using eight99bushwick::piapiac::DockerMgr;
+
+int main()
+{
+	DockerMgr dm;
 	duckdb_result result;
-    idx_t row_count = 0;
-    idx_t column_count = 0;
+	idx_t row_count = 0;
+	idx_t column_count = 0;
 
-	if (duckdb_open(NULL, &db) == DuckDBError) {
-		fprintf(stderr, "Failed to open database\n");
+	if (!dm.Init())
+	{
+		exit(EXIT_FAILURE);
+	}
+
+	if (!dm.Query("CREATE TABLE integers(i INTEGER, j INTEGER);"))
+	{
 		goto cleanup;
 	}
-	if (duckdb_connect(db, &con) == DuckDBError) {
-		fprintf(stderr, "Failed to open connection\n");
+
+	if (!dm.Query("INSERT INTO integers VALUES (3, 4), (5, 6), (7, NULL);"))
+	{
 		goto cleanup;
 	}
-	if (duckdb_query(con, "CREATE TABLE integers(i INTEGER, j INTEGER);", NULL) == DuckDBError) {
-		fprintf(stderr, "Failed to query database\n");
+
+	if (!dm.Query("SELECT * FROM integers;", &result))
+	{
 		goto cleanup;
 	}
-	if (duckdb_query(con, "INSERT INTO integers VALUES (3, 4), (5, 6), (7, NULL);", NULL) == DuckDBError) {
-		fprintf(stderr, "Failed to query database\n");
-		goto cleanup;
-	}
-	if (duckdb_query(con, "SELECT * FROM integers", &result) == DuckDBError) {
-		fprintf(stderr, "Failed to query database\n");
-		goto cleanup;
-	}
+
 	// print the names of the result
 	row_count = duckdb_row_count(&result);
 	column_count = duckdb_column_count(&result);
-	for (size_t i = 0; i < column_count; i++) {
+	for (size_t i = 0; i < column_count; i++)
+	{
 		printf("%s ", duckdb_column_name(&result, i));
 	}
 	printf("\n");
 	// print the data of the result
-	for (size_t row_idx = 0; row_idx < row_count; row_idx++) {
-		for (size_t col_idx = 0; col_idx < column_count; col_idx++) {
+	for (size_t row_idx = 0; row_idx < row_count; row_idx++)
+	{
+		for (size_t col_idx = 0; col_idx < column_count; col_idx++)
+		{
 			char *val = duckdb_value_varchar(&result, col_idx, row_idx);
 			printf("%s ", val);
 			duckdb_free(val);
@@ -45,8 +52,8 @@ int main() {
 		printf("\n");
 	}
 	// duckdb_print_result(result);
+	exit(EXIT_SUCCESS);
 cleanup:
 	duckdb_destroy_result(&result);
-	duckdb_disconnect(&con);
-	duckdb_close(&db);
+	exit(EXIT_FAILURE);
 }
