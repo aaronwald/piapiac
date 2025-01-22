@@ -13,6 +13,7 @@
 		"vscode": {
 			"settings": {
 				"terminal.integrated.shell.linux": "/bin/bash",
+				"cmake.cmakePath": "/usr/local/bin/cmake",
 				"cmake.generator": "Ninja",
 				"editor.renderWhitespace": "all",
 				"editor.renderControlCharacters": true,
