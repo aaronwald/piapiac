@@ -19,4 +19,4 @@ RUN if [ "${REINSTALL_CMAKE_VERSION_FROM_SOURCE}" != "none" ]; then \
 
 RUN apt-get update
 RUN export DEBIAN_FRONTEND=noninteractive \
-    && apt-get -y install --no-install-recommends libnuma-dev libyaml-dev libssl-dev ninja-build clang-15 linux-perf clang-16
+    && apt-get -y install --no-install-recommends libnuma-dev libyaml-dev libssl-dev ninja-build clang-15 linux-perf clang-16 libclang-rt-16-dev

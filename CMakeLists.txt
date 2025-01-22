@@ -10,7 +10,15 @@ endif()
 
 include(FetchContent)
 
+# BEGIN DuckDB
+FetchContent_Declare(
+  DuckDB
+  GIT_REPOSITORY https://github.com/duckdb/duckdb
+  GIT_TAG        v1.1.3
+)
 
+FetchContent_MakeAvailable(DuckDB)
+# END DuckDB
 
 # BEGIN olalla
 add_executable(piapiac "src/main.cpp")
@@ -18,10 +26,8 @@ set(piapiac_debug_flags -Wpedantic -Wno-deprecated-declarations -fno-omit-frame-
 set(piapiac_release_flags  -Wpedantic -Wno-deprecated-declarations -fno-omit-frame-pointer -g -O3 -DSPDLOG_DEBUG_ON=0 -DSPDLOG_TRACE_ON=0 )
 target_compile_options(piapiac PRIVATE "$<IF:$<CONFIG:Debug>,${piapiac_debug_flags},${piapiac_release_flags}>")
 target_compile_options(piapiac PRIVATE -Werror -Wall -Wextra)
-
-target_link_libraries(piapiac)
+target_link_libraries(piapiac duckdb)
 # END piapiac
-
 
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
   add_subdirectory(tests)
