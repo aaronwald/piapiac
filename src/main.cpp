@@ -46,8 +46,6 @@ int main(int argc [[maybe_unused]], char **argv)
 	if (!argv)
 		exit(EXIT_FAILURE);
 
-	quill::Backend::start();
-
 	quill::Logger *logger = quill::Frontend::create_or_get_logger(
 			"root", quill::Frontend::create_or_get_sink<quill::ConsoleSink>("sink_id_1"));
 
@@ -63,6 +61,9 @@ int main(int argc [[maybe_unused]], char **argv)
 		exit(EXIT_FAILURE);
 	}
 	int opt;
+
+	// start quill after
+	quill::Backend::start();
 
 	while ((opt = getopt(argc, argv, "d")) != -1)
 	{ // for each option...
