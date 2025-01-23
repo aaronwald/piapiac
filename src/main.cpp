@@ -18,7 +18,6 @@ typedef std::function<void(void)> CBType;
 typedef quill::Logger *LogType;
 typedef coypu::event::EventManager<LogType> EventManagerType;
 
-// TODO Wrap quill for libechidna
 // TODO Connect to mqtt and parse for msg
 
 typedef struct PiapiacContextS
@@ -123,8 +122,6 @@ int main(int argc [[maybe_unused]], char **argv)
 		{
 			done = true;
 		}
-
-		ECHIDNA_LOG_DEBUG(logger, "piapiac wait");
 	}
 
 	ECHIDNA_LOG_INFO(logger, "piapiac done");
