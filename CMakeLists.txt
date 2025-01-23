@@ -7,6 +7,7 @@ find_package(libwebsockets CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(yaml CONFIG REQUIRED)
 find_package(libuv CONFIG REQUIRED)
+find_package(quill REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(NGHTTP2 REQUIRED IMPORTED_TARGET libnghttp2)
@@ -62,7 +63,7 @@ set(piapiac_release_flags  -Wpedantic -Wno-deprecated-declarations -fno-omit-fra
 target_compile_options(piapiac PRIVATE "$<IF:$<CONFIG:Debug>,${piapiac_debug_flags},${piapiac_release_flags}>")
 target_compile_options(piapiac PRIVATE -Werror -Wall -Wextra ) # -v for verbose
 target_link_options(piapiac PRIVATE -fsanitize=address -fsanitize=undefined -v) # -v for verbose
-target_link_libraries(piapiac PRIVATE pthread duckdb  OpenSSL::SSL OpenSSL::Crypto numa yaml nghttp2 echidna)
+target_link_libraries(piapiac PRIVATE pthread duckdb  OpenSSL::SSL OpenSSL::Crypto numa yaml nghttp2 echidna PUBLIC quill::quill)
 
 
 # END piapiac
