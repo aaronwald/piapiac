@@ -4,11 +4,11 @@
 #include "piapiac.hpp"
 #include "mqtt.hpp"
 
+#include "quill/LogMacros.h"
 #include <echidna/event_mgr.hpp>
 
 #include "quill/Backend.h"
 #include "quill/Frontend.h"
-#include "quill/LogMacros.h"
 #include "quill/Logger.h"
 #include "quill/sinks/ConsoleSink.h"
 
@@ -57,7 +57,11 @@ int main(int argc [[maybe_unused]], char **argv)
 		std::abort(); });
 
 	// Block all signals - wait til random is collected before blocking
-	SignalFDHelper::BlockAllSignals();
+	if (SignalFDHelper::BlockAllSignals() != 0)
+	{
+		LOG_ERROR(logger, "BlockAllSignals");
+		exit(EXIT_FAILURE);
+	}
 	int opt;
 
 	while ((opt = getopt(argc, argv, "d")) != -1)
@@ -98,8 +102,12 @@ int main(int argc [[maybe_unused]], char **argv)
 			LOG_ERROR(logger, "readSignalCB");
 		}
 		done = true;
+		ECHIDNA_LOG_WARNING(logger, "piapiac break");
+
 		return 0;
 	};
+
+	ECHIDNA_LOG_INFO(logger, "piapiac starting");
 
 	if (context->_eventMgr->Register(signalFD, readSignalCB, nullptr, nullptr))
 	{
@@ -114,9 +122,11 @@ int main(int argc [[maybe_unused]], char **argv)
 		{
 			done = true;
 		}
+
+		ECHIDNA_LOG_DEBUG(logger, "piapiac wait");
 	}
 
-	std::cout << "piapiac leaving" << std::endl;
+	ECHIDNA_LOG_INFO(logger, "piapiac done");
 
 	exit(EXIT_SUCCESS);
 }
