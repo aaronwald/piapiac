@@ -1,9 +1,14 @@
+#include <stdlib.h>
 #include <iostream>
 #include <duckdb.h>
-#include <piapiac.hpp>
-#include <stdlib.h>
+#include "piapiac.hpp"
+#include "mqtt.hpp"
+
+#include <echidna/event_mgr.hpp>
 
 using eight99bushwick::piapiac::DockerMgr;
+
+// TODO: Next epoll? and send mqtt connect to server
 
 int main()
 {
