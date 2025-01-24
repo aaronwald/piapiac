@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <iostream>
 #include <duckdb.h>
+#include <assert.h>
 #include "piapiac.hpp"
 #include "mqtt.hpp"
 
@@ -82,11 +83,15 @@ int main(int argc [[maybe_unused]], char **argv)
 
   // start quill after
   quill::Backend::start();
+  std::string host("mqtt");
 
-  while ((opt = getopt(argc, argv, "d")) != -1)
+  while ((opt = getopt(argc, argv, "dm:")) != -1)
   { // for each option...
     switch (opt)
     {
+    case 'm':
+      host = optarg;
+      break;
     case 'd':
       logger->set_log_level(quill::LogLevel::Debug);
       break;
@@ -135,10 +140,10 @@ int main(int argc [[maybe_unused]], char **argv)
 
 
   // BEGIN mqtt
-  int mqttFD = TCPHelper::ConnectStream("mqtt", 1883);
-  if (mqttFD == -1)
+  int mqttFD = TCPHelper::ConnectStream(host.c_str(), 1883);
+  if (mqttFD <= 0)
   {
-    LOG_ERROR(logger, "ConnectStream {}", errno);
+    LOG_ERROR(logger, "ConnectStream host {} {} fd {}", host, errno, mqttFD);
 
     exit(EXIT_FAILURE);
   }
@@ -151,9 +156,9 @@ int main(int argc [[maybe_unused]], char **argv)
 
   // unencrypted
   std::function<int(int, const struct iovec *, int)> readMQTTCB =
-      std::bind(::writev, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-  std::function<int(int, const struct iovec *, int)> writeMQTTCB =
       std::bind(::readv, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+  std::function<int(int, const struct iovec *, int)> writeMQTTCB =
+      std::bind(::writev, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 
   context->_mqttManager->Register(mqttFD, readMQTTCB, writeMQTTCB, context->_mqttStreamSP, nullptr);
 
@@ -162,6 +167,7 @@ int main(int argc [[maybe_unused]], char **argv)
   context->_eventMgr->Register(mqttFD, mqttReadCB, mqttWriteCB, closeCB);
   // END mqtt
 
+  assert(context->_mqttManager->Connect(mqttFD));
   // wait til signal
   while (!done)
   {

@@ -57,6 +57,14 @@ namespace eight99bushwick::piapiac
     MQ_STATE_ERROR = 4,
   };
 
+  struct __attribute__((packed)) MqttConnect  {
+    uint8_t protocolName[6];
+    uint8_t version;
+    uint8_t flags;
+    uint16_t keepAlive;
+    uint8_t propertyLength;
+  };
+
   // supports non blocking io
   template <typename StreamTrait, typename PublishTrait>
   class MqttManager
@@ -131,9 +139,6 @@ namespace eight99bushwick::piapiac
         if (ret < 0)
           return ret; // error
 
-        // We could have EAGAIN/EWOULDBLOCK so we want to maintain write if data available
-        // 0 will clear write bit
-        // Can improve branching here if we just return is empty directly on the stack without another call
         return con->_writeBuf->IsEmpty() ? 0 : 1;
       }
       else if (con->_mqttOutStream)
@@ -168,12 +173,66 @@ namespace eight99bushwick::piapiac
       return false;
     }
 
+    bool Connect (int fd) {
+      auto x = _connections.find(fd);
+      if (x == _connections.end())
+        return false;
+
+      std::shared_ptr<con_type> &con = (*x).second;
+
+      if (con) {
+        // send connect
+        MqttFixed fixed;
+        fixed.control_packet_type = static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_CONNECT);
+        fixed.flags = 0;
+        Queue(fd, reinterpret_cast<const char *>(&fixed), sizeof(MqttFixed));
+        // Remaining Length field
+
+        MqttConnect connect;
+        ::memset(&connect, 0, sizeof(MqttConnect));
+        connect.protocolName[0] = 0;
+        connect.protocolName[1] = 4;
+        connect.protocolName[2] = 'M';
+        connect.protocolName[3] = 'Q';
+        connect.protocolName[4] = 'T';
+        connect.protocolName[5] = 'T';
+        connect.version = 5;
+        connect.flags = 0x2; // clean session
+        connect.keepAlive = 60; // 60 seconds
+        connect.propertyLength = 0; // no properties
+
+        // encode variable length
+        encodeVarInt(fd, sizeof(MqttConnect));
+
+        Queue(fd, reinterpret_cast<const char *>(&connect), sizeof(MqttConnect));
+
+        return true;
+      }
+
+      return true;
+    }
+
     bool Connect()
     {
       return true;
     }
 
+
   private:
+    void encodeVarInt(int fd, uint8_t remainingLength)
+    {
+      do
+      {
+        uint8_t encodedByte = remainingLength % 128;
+        remainingLength /= 128;
+        if (remainingLength > 0)
+        {
+          encodedByte |= 128;
+        }
+        Queue(fd, reinterpret_cast<const char *>(&encodedByte), sizeof(uint8_t));
+      } while (remainingLength > 0);
+    }
+
     typedef struct MqttConnection
     {
       std::shared_ptr<coypu::buf::BipBuf<char, uint64_t>> _writeBuf;
