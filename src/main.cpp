@@ -159,9 +159,9 @@ int main(int argc [[maybe_unused]], char **argv)
   //  context->_eventMgr->SetWrite(mqttFD);
 
   // unencrypted
-  std::function<int(int, const struct iovec *, int)> readCB =
+  std::function<int(int, const struct iovec *, int)> readMQTTCB =
       std::bind(::writev, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-  std::function<int(int, const struct iovec *, int)> writeCB =
+  std::function<int(int, const struct iovec *, int)> writeMQTTCB =
       std::bind(::readv, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 
   //  contextSP->_mqttManager->RegisterConnection(mqttFD, false, readCB, writeCB, contextSP->_mqttSP);
