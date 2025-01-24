@@ -7,7 +7,7 @@
 #include "quill/LogMacros.h"
 #include <echidna/event_mgr.hpp>
 
-#include "quill/Backend.h" a
+#include "quill/Backend.h"
 #include "quill/Frontend.h"
 #include "quill/Logger.h"
 #include "quill/sinks/ConsoleSink.h"
