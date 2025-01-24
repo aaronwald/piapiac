@@ -13,8 +13,8 @@ namespace eight99bushwick::piapiac
 {
   struct MqttFixed
   {
-    uint8_t control_packet_type : 4;
     uint8_t flags : 4;
+    uint8_t control_packet_type : 4;
   };
   // followed by variable length
   // followed by packet identifier (sometimes)
@@ -185,7 +185,7 @@ namespace eight99bushwick::piapiac
         MqttFixed fixed;
         fixed.control_packet_type = static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_CONNECT);
         fixed.flags = 0;
-        Queue(fd, reinterpret_cast<const char *>(&fixed), sizeof(MqttFixed));
+        assert(Queue(fd, reinterpret_cast<const char *>(&fixed), sizeof(MqttFixed)));
         // Remaining Length field
 
         MqttConnect connect;
@@ -204,7 +204,7 @@ namespace eight99bushwick::piapiac
         // encode variable length
         encodeVarInt(fd, sizeof(MqttConnect));
 
-        Queue(fd, reinterpret_cast<const char *>(&connect), sizeof(MqttConnect));
+        assert(Queue(fd, reinterpret_cast<const char *>(&connect), sizeof(MqttConnect)));
 
         return true;
       }
