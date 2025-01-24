@@ -5,7 +5,11 @@
 #include "mqtt.hpp"
 
 #include "quill/LogMacros.h"
-#include <echidna/event_mgr.hpp>
+#include "echidna/event_mgr.hpp"
+#include "echidna/tcp.hpp"
+#include "echidna/store.hpp"
+#include "echidna/file.hpp"
+#include "echidna/storeutil.hpp"
 
 #include "quill/Backend.h"
 #include "quill/Frontend.h"
@@ -13,12 +17,20 @@
 #include "quill/sinks/ConsoleSink.h"
 
 using namespace coypu::event;
+using namespace coypu::tcp;
+using namespace coypu::store;
+using namespace coypu::file;
 
+// BEGIN Types
 typedef std::function<void(void)> CBType;
 typedef quill::Logger *LogType;
 typedef coypu::event::EventManager<LogType> EventManagerType;
+typedef coypu::store::LogRWStream<MMapAnon, coypu::store::OneShotCache, 128> AnonRWBufType;
+typedef coypu::store::PositionedStream<AnonRWBufType> AnonStreamType;
+// END Types
 
-// TODO Connect to mqtt and parse for msg
+// TODO: Create mqtt manager and mqtt state machine
+// TODO: On register, we have to send the connect message from the client.
 
 typedef struct PiapiacContextS
 {
@@ -26,6 +38,7 @@ typedef struct PiapiacContextS
   {
     _eventMgr = std::make_shared<EventManagerType>(consoleLogger);
     _set_write_ws = std::bind(&EventManagerType::SetWrite, _eventMgr, std::placeholders::_1);
+    _mqttStreamSP = coypu::store::StoreUtil::CreateAnonStore<AnonStreamType, AnonRWBufType>(); // mqtt msgs will end up here
   }
   PiapiacContextS(const PiapiacContextS &other) = delete;
   PiapiacContextS &operator=(const PiapiacContextS &other) = delete;
@@ -34,10 +47,7 @@ typedef struct PiapiacContextS
 
   std::shared_ptr<EventManagerType> _eventMgr;
   std::function<int(int)> _set_write_ws;
-
-  std::shared_ptr<EventCBManager<CBType>> _cbManager;
-
-  std::unordered_map<int, std::pair<std::string, std::string>> _krakenChannelToPairType;
+  std::shared_ptr<AnonStreamType> _mqttStreamSP;
 } CoypuContext;
 
 int main(int argc [[maybe_unused]], char **argv)
@@ -88,7 +98,36 @@ int main(int argc [[maybe_unused]], char **argv)
   if (signalFD == -1)
   {
     LOG_ERROR(logger, "CreateNonBlockSignalFD {}", errno);
+    exit(EXIT_FAILURE);
+  }
 
+  int mqttFD = TCPHelper::ConnectStream("mqtt", 1883);
+  if (mqttFD == -1)
+  {
+    LOG_ERROR(logger, "ConnectStream {}", errno);
+
+    exit(EXIT_FAILURE);
+  }
+
+  auto readCB = [&logger](int fd) -> int
+  {
+    ECHIDNA_LOG_INFO(logger, "piapiac readCB {}", fd);
+    return 0;
+  };
+  auto writeCB = [&logger](int fd) -> int
+  {
+    ECHIDNA_LOG_INFO(logger, "piapiac writeCB {}", fd);
+    return 0;
+  };
+  auto closeCB = [&logger](int fd) -> int
+  {
+    ECHIDNA_LOG_INFO(logger, "piapiac closeCB {}", fd);
+    return 0;
+  };
+
+  if (context->_eventMgr->Register(mqttFD, readCB, writeCB, closeCB) != 0)
+  {
+    ECHIDNA_LOG_ERROR(logger, "Register {}", errno);
     exit(EXIT_FAILURE);
   }
 
@@ -114,6 +153,18 @@ int main(int argc [[maybe_unused]], char **argv)
     LOG_ERROR(logger, "Register {}, errno");
   }
   // END signal
+
+  // After a Network Connection is established by a Client to a Server, the first packet sent from the Client to the Server MUST be a CONNECT packet [MQTT-3.1.0-1].
+  // need buffers, craete connect packet, then set write_ws flag
+  //  context->_eventMgr->SetWrite(mqttFD);
+
+  // unencrypted
+  std::function<int(int, const struct iovec *, int)> readCB =
+      std::bind(::writev, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+  std::function<int(int, const struct iovec *, int)> writeCB =
+      std::bind(::readv, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+
+  //  contextSP->_mqttManager->RegisterConnection(mqttFD, false, readCB, writeCB, contextSP->_mqttSP);
 
   // wait til signal
   while (!done)

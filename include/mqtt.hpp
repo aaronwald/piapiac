@@ -43,5 +43,31 @@ namespace eight99bushwick
       PUBLISH_QOS1 = 0x02,
       PUBLISH_RETAIN = 0x01,
     };
+
+    enum class MqttState : uint8_t
+    {
+      DISCONNECTED = 0,
+      CONNECTING = 1,
+      CONNECTED = 2,
+      DISCONNECTING = 3,
+      DONE = 4,
+      ERROR = 4,
+    };
+
+    // supports non blocking io
+    class MqttManager
+    {
+    public:
+      MqttManager();
+      virtual ~MqttManager();
+      MqttManager(const MqttManager &other) = delete;
+      MqttManager &operator=(const MqttManager &other) = delete;
+      MqttManager(MqttManager &&other) = delete;
+      MqttManager &operator=(MqttManager &&other) = delete;
+
+      int Register(int fd, const std::function<int(int)> &readCB,
+                   const std::function<int(int)> &writeCB,
+                   const std::function<int(int)> &closeCB);
+    };
   }
 }
