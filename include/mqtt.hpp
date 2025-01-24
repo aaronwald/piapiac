@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include <arpa/inet.h>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -182,10 +183,11 @@ namespace eight99bushwick::piapiac
 
       if (con) {
         // send connect
-        MqttFixed fixed;
-        fixed.control_packet_type = static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_CONNECT);
-        fixed.flags = 0;
-        assert(Queue(fd, reinterpret_cast<const char *>(&fixed), sizeof(MqttFixed)));
+        // MqttFixed fixed;
+        // fixed.control_packet_type = static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_CONNECT);
+        // fixed.flags = 0;
+        uint8_t fixed = (static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_CONNECT) << 4);
+        assert(Queue(fd, reinterpret_cast<const char *>(&fixed), sizeof(fixed)));
         // Remaining Length field
 
         MqttConnect connect;
@@ -197,14 +199,33 @@ namespace eight99bushwick::piapiac
         connect.protocolName[4] = 'T';
         connect.protocolName[5] = 'T';
         connect.version = 5;
-        connect.flags = 0x2; // clean session
+        connect.flags = 0xC2; // clean session
         connect.keepAlive = 60; // 60 seconds
         connect.propertyLength = 0; // no properties
 
         // encode variable length
-        encodeVarInt(fd, sizeof(MqttConnect));
+        encodeVarInt(fd, sizeof(MqttConnect)+14+6);
 
         assert(Queue(fd, reinterpret_cast<const char *>(&connect), sizeof(MqttConnect)));
+
+
+//Client Identifier, Will Properties, Will Topic, Will Payload, User Name, Password
+
+        //client id
+        uint16_t client_id_len = htons(6);
+        assert(Queue(fd, reinterpret_cast<const char *>(&client_id_len), sizeof(uint16_t)));
+        assert(Queue(fd, "waldid", 6));
+
+        //user
+        client_id_len = htons(4);
+        assert(Queue(fd, reinterpret_cast<const char *>(&client_id_len), sizeof(uint16_t)));
+        assert(Queue(fd, "wald", 4));
+
+        //pw
+        client_id_len = htons(4);
+        assert(Queue(fd, reinterpret_cast<const char *>(&client_id_len), sizeof(uint16_t)));
+        assert(Queue(fd, "wald", 4));
+
 
         return true;
       }
