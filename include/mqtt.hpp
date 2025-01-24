@@ -121,6 +121,85 @@ namespace eight99bushwick::piapiac
       if (r < 0)
         return -3;
 
+      std::cout << "start " << con->_dataStream->Available() << std::endl;
+
+      if (con->_dataStream->Available() >= (sizeof(MqttFixed)+2))
+      {
+        MqttFixed fixed;
+        char f;
+        con->_dataStream->Peak(0, f);
+        fixed = *reinterpret_cast<MqttFixed *>(&f);
+
+        char a,b;
+        uint16_t len= 0;
+
+        // we have to peak to get the variable length
+        // Peak at 0, 1, 2,  (assumge 2 bytes max length)
+        con->_dataStream->Peak(1, a);
+        int skip = 1;
+        if (a & 0x80)
+        {
+          con->_dataStream->Peak(2, b);
+          assert(!(b & 0x80));
+          len = (a & 0x7F) << 8 | b;
+          skip = 3;
+        } else {
+          len = a;
+          skip = 2;
+        }
+        std::cout << "len " << len << std::endl;
+
+        if (len > con->_dataStream->Available())
+          return 0;
+
+        con->_dataStream->Skip(skip); // skip what we peaked
+
+        assert(len < 8192);
+        char buf[8192];
+        con->_dataStream->Pop(buf, len);
+
+        // process data
+        std::cout << "fixed.control_packet_type " << (int)static_cast<uint8_t>(fixed.control_packet_type) << std::endl;
+        switch(fixed.control_packet_type)
+        {
+          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_CONNECT):
+            break;
+          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_CONNACK):
+            std::cout << "connack" << std::endl;
+            break;
+          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBLISH):
+            break;
+          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBACK):
+            break;
+          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBREC):
+            break;
+          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBREL):
+            break;
+          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBCOMP):
+            break;
+          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_SUBSCRIBE):
+            break;
+          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_SUBACK):
+            break;
+          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_UNSUBSCRIBE):
+            break;
+          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_UNSUBACK):
+            break;
+          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PINGREQ):
+            break;
+          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PINGRESP):
+            break;
+          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_DISCONNECT):
+            break;
+          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_AUTH):
+            break;
+          default:
+            break;
+        }
+
+        std::cout << "left " << con->_dataStream->Available() << std::endl;
+      }
+
       return 0;
     }
 
@@ -253,6 +332,7 @@ namespace eight99bushwick::piapiac
         Queue(fd, reinterpret_cast<const char *>(&encodedByte), sizeof(uint8_t));
       } while (remainingLength > 0);
     }
+
 
     typedef struct MqttConnection
     {
