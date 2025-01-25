@@ -2,10 +2,11 @@
 #include <iostream>
 #include <duckdb.h>
 #include <assert.h>
-#include "piapiac.hpp"
-#include "mqtt.hpp"
 
 #include "quill/LogMacros.h"
+
+#include "piapiac.hpp"
+#include "mqtt.hpp"
 #include "echidna/event_mgr.hpp"
 #include "echidna/tcp.hpp"
 #include "echidna/store.hpp"
@@ -31,12 +32,12 @@ typedef coypu::store::LogRWStream<MMapAnon, coypu::store::OneShotCache, 128> Ano
 typedef coypu::store::PositionedStream<AnonRWBufType> AnonStreamType;
 typedef coypu::store::MultiPositionedStreamLog<RWBufType> PublishStreamType;
 
-typedef eight99bushwick::piapiac::MqttManager<AnonStreamType, PublishStreamType> MqttManagerType;
+typedef eight99bushwick::piapiac::MqttManager<LogType, AnonStreamType, PublishStreamType> MqttManagerType;
 
 // END Types
 
 // TODO: Create mqtt manager and mqtt state machine
-// TODO: On register, we have to send the connect message from the client.
+// TODO: Parse properties cleanly
 
 typedef struct PiapiacContextS
 {
@@ -46,8 +47,7 @@ typedef struct PiapiacContextS
     _set_write_ws = std::bind(&EventManagerType::SetWrite, _eventMgr, std::placeholders::_1);
     _mqttStreamSP = coypu::store::StoreUtil::CreateAnonStore<AnonStreamType, AnonRWBufType>(); // mqtt msgs will end up here
 
-    _mqttManager = std::make_shared<MqttManagerType>(_set_write_ws);
-
+    _mqttManager = std::make_shared<MqttManagerType>(consoleLogger, _set_write_ws);
   }
   PiapiacContextS(const PiapiacContextS &other) = delete;
   PiapiacContextS &operator=(const PiapiacContextS &other) = delete;
@@ -138,7 +138,6 @@ int main(int argc [[maybe_unused]], char **argv)
   }
   // END signal
 
-
   // BEGIN mqtt
   int mqttFD = TCPHelper::ConnectStream(host.c_str(), 1883);
   if (mqttFD <= 0)
@@ -168,6 +167,19 @@ int main(int argc [[maybe_unused]], char **argv)
   // END mqtt
 
   assert(context->_mqttManager->Connect(mqttFD));
+
+  int timerFD = TimerFDHelper::CreateMonotonicNonBlock();
+  TimerFDHelper::SetRelativeRepeating(timerFD, 10, 0); // 10 seconds
+  context->_eventMgr->Register(timerFD, [&mqttFD, &context](int fd [[maybe_unused]])
+                               {
+                                	 uint64_t x;
+                                  ::read(fd, &x, sizeof(uint64_t)); 
+                                 ECHIDNA_LOG_INFO(context->_consoleLogger, "timer");
+                                 context->_mqttManager->Ping(mqttFD);
+                                 return 0; }, nullptr, nullptr);
+
+  // context->_mqttManager->Ping(mqttFD);
+
   // wait til signal
   while (!done)
   {

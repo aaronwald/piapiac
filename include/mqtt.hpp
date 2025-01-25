@@ -9,6 +9,7 @@
 #include <sys/uio.h>
 #include <assert.h>
 #include <echidna/buf.hpp>
+#include <echidna/log.hpp>
 
 namespace eight99bushwick::piapiac
 {
@@ -58,7 +59,36 @@ namespace eight99bushwick::piapiac
     MQ_STATE_ERROR = 4,
   };
 
-  struct __attribute__((packed)) MqttConnect  {
+  /*
+   */
+  enum class MqttReasonCode : uint8_t
+  {
+    MQ_RC_SUCCESS = 0,
+    MQ_RC_UNSPECIFIED_ERROR = 0x80,
+    MQ_RC_MALFORMED_PACKET = 0x81,
+    MQ_RC_PROTOCOL_ERROR = 0x82,
+    MQ_RC_IMPLEMENTATION_SPECIFIC_ERROR = 0x83,
+    MQ_RC_UNSUPPORTED_PROTOCOL_VERSION = 0x84,
+    MQ_RC_CLIENT_IDENTIFIER_NOT_VALID = 0x85,
+    MQ_RC_BAD_USER_NAME_OR_PASSWORD = 0x86,
+    MQ_RC_NOT_AUTHORIZED = 0x87,
+    MQ_RC_SERVER_UNAVAILABLE = 0x88,
+    MQ_RC_SERVER_BUSY = 0x89,
+    MQ_RC_BANNED = 0x8A,
+    MQ_RC_BAD_AUTHENTICATION_METHOD = 0x8C,
+    MQ_RC_TOPIC_NAME_INVALID = 0x90,
+    MQ_RC_PACKET_TOO_LARGE = 0x95,
+    MQ_RC_QUOTA_EXCEEDED = 0x97,
+    MQ_RC_PAYLOAD_FORMAT_INVALID = 0x99,
+    MQ_RC_RETAIN_NOT_SUPPORTED = 0x9A,
+    MQ_RC_QOS_NOT_SUPPORTED = 0x9B,
+    MQ_RC_USE_ANOTHER_SERVER = 0x9C,
+    MQ_RC_SERVER_MOVED = 0x9D,
+    MQ_RC_CONNECTION_RATE_EXCEEDED = 0x9F
+  };
+
+  struct __attribute__((packed)) MqttConnect
+  {
     uint8_t protocolName[6];
     uint8_t version;
     uint8_t flags;
@@ -67,13 +97,13 @@ namespace eight99bushwick::piapiac
   };
 
   // supports non blocking io
-  template <typename StreamTrait, typename PublishTrait>
+  template <typename LogTrait, typename StreamTrait, typename PublishTrait>
   class MqttManager
   {
   public:
-      typedef std::function<int(int)> write_cb_type;
+    typedef std::function<int(int)> write_cb_type;
 
-    MqttManager(write_cb_type set_write) : _set_write(set_write)
+    MqttManager(LogTrait logger, write_cb_type set_write) : _logger(logger), _set_write(set_write)
     {
     }
     virtual ~MqttManager()
@@ -121,18 +151,17 @@ namespace eight99bushwick::piapiac
       if (r < 0)
         return -3;
 
-      std::cout << "start " << con->_dataStream->Available() << std::endl;
-
-      if (con->_dataStream->Available() >= (sizeof(MqttFixed)+2))
+      if (con->_dataStream->Available() >= (sizeof(MqttFixed) + 2))
       {
         MqttFixed fixed;
         char f;
         con->_dataStream->Peak(0, f);
         fixed = *reinterpret_cast<MqttFixed *>(&f);
 
-        char a,b;
-        uint16_t len= 0;
+        char a, b;
+        uint16_t len = 0;
 
+        // TODO: Cleanup
         // we have to peak to get the variable length
         // Peak at 0, 1, 2,  (assumge 2 bytes max length)
         con->_dataStream->Peak(1, a);
@@ -143,12 +172,12 @@ namespace eight99bushwick::piapiac
           assert(!(b & 0x80));
           len = (a & 0x7F) << 8 | b;
           skip = 3;
-        } else {
+        }
+        else
+        {
           len = a;
           skip = 2;
         }
-        std::cout << "len " << len << std::endl;
-
         if (len > con->_dataStream->Available())
           return 0;
 
@@ -159,45 +188,59 @@ namespace eight99bushwick::piapiac
         con->_dataStream->Pop(buf, len);
 
         // process data
-        std::cout << "fixed.control_packet_type " << (int)static_cast<uint8_t>(fixed.control_packet_type) << std::endl;
-        switch(fixed.control_packet_type)
+        switch (fixed.control_packet_type)
         {
-          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_CONNECT):
-            break;
-          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_CONNACK):
-            std::cout << "connack" << std::endl;
-            break;
-          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBLISH):
-            break;
-          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBACK):
-            break;
-          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBREC):
-            break;
-          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBREL):
-            break;
-          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBCOMP):
-            break;
-          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_SUBSCRIBE):
-            break;
-          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_SUBACK):
-            break;
-          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_UNSUBSCRIBE):
-            break;
-          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_UNSUBACK):
-            break;
-          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PINGREQ):
-            break;
-          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PINGRESP):
-            break;
-          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_DISCONNECT):
-            break;
-          case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_AUTH):
-            break;
-          default:
-            break;
+        case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_CONNECT):
+          ECHIDNA_LOG_DEBUG(_logger, "MQTT CONNECT");
+          break;
+        case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_CONNACK):
+          // TODO Create struct
+          // TODO Connect Acknowledge Flags, Connect Reason Code, and Properties.
+          ECHIDNA_LOG_DEBUG(_logger, "MQTT CONNACK");
+          log_reason_code(buf[1]);
+          break;
+        case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBLISH):
+          ECHIDNA_LOG_DEBUG(_logger, "MQTT PUBLISH");
+          break;
+        case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBACK):
+          ECHIDNA_LOG_DEBUG(_logger, "MQTT PUBACK");
+          break;
+        case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBREC):
+          ECHIDNA_LOG_DEBUG(_logger, "MQTT PUBREC");
+          break;
+        case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBREL):
+          ECHIDNA_LOG_DEBUG(_logger, "MQTT PUBREL");
+          break;
+        case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBCOMP):
+          ECHIDNA_LOG_DEBUG(_logger, "MQTT PUBCOMP");
+          break;
+        case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_SUBSCRIBE):
+          ECHIDNA_LOG_DEBUG(_logger, "MQTT SUBSCRIBE");
+          break;
+        case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_SUBACK):
+          ECHIDNA_LOG_DEBUG(_logger, "MQTT SUBACK");
+          break;
+        case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_UNSUBSCRIBE):
+          ECHIDNA_LOG_DEBUG(_logger, "MQTT UNSUBSCRIBE");
+          break;
+        case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_UNSUBACK):
+          ECHIDNA_LOG_DEBUG(_logger, "MQTT UNSUBACK");
+          break;
+        case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PINGREQ):
+          ECHIDNA_LOG_DEBUG(_logger, "MQTT PINGREQ");
+          break;
+        case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PINGRESP):
+          ECHIDNA_LOG_DEBUG(_logger, "MQTT PINGRESP");
+          break;
+        case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_DISCONNECT):
+          ECHIDNA_LOG_DEBUG(_logger, "MQTT DISCONNECT");
+          break;
+        case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_AUTH):
+          ECHIDNA_LOG_DEBUG(_logger, "MQTT AUTH");
+          break;
+        default:
+          break;
         }
-
-        std::cout << "left " << con->_dataStream->Available() << std::endl;
       }
 
       return 0;
@@ -212,7 +255,7 @@ namespace eight99bushwick::piapiac
       if (!con)
         return -2;
 
-       if (!con->_writeBuf->IsEmpty())
+      if (!con->_writeBuf->IsEmpty())
       {
         int ret = con->_writeBuf->Writev(fd, con->_writev);
 
@@ -236,7 +279,7 @@ namespace eight99bushwick::piapiac
       return 0;
     }
 
-  // Queue data
+    // Queue data
     bool Queue(int fd, const char *data, uint64_t len)
     {
       auto x = _connections.find(fd);
@@ -245,7 +288,8 @@ namespace eight99bushwick::piapiac
 
       std::shared_ptr<con_type> &con = (*x).second;
 
-      if (con) {
+      if (con)
+      {
         con->_writeBuf->Push(data, len);
         _set_write(fd);
         return true;
@@ -253,14 +297,37 @@ namespace eight99bushwick::piapiac
       return false;
     }
 
-    bool Connect (int fd) {
+    bool Ping(int fd)
+    {
       auto x = _connections.find(fd);
       if (x == _connections.end())
         return false;
 
       std::shared_ptr<con_type> &con = (*x).second;
 
-      if (con) {
+      if (con)
+      {
+        // send ping
+        uint8_t fixed = (static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PINGREQ) << 4);
+        assert(Queue(fd, reinterpret_cast<const char *>(&fixed), sizeof(fixed)));
+        // Remaining Length field
+        assert(Queue(fd, "\0", 1));
+        return true;
+      }
+
+      return false;
+    }
+
+    bool Connect(int fd)
+    {
+      auto x = _connections.find(fd);
+      if (x == _connections.end())
+        return false;
+
+      std::shared_ptr<con_type> &con = (*x).second;
+
+      if (con)
+      {
         // send connect
         // MqttFixed fixed;
         // fixed.control_packet_type = static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_CONNECT);
@@ -278,33 +345,31 @@ namespace eight99bushwick::piapiac
         connect.protocolName[4] = 'T';
         connect.protocolName[5] = 'T';
         connect.version = 5;
-        connect.flags = 0xC2; // clean session
-        connect.keepAlive = 60; // 60 seconds
+        connect.flags = 0xC2;       // clean session
+        connect.keepAlive = 60;     // 60 seconds
         connect.propertyLength = 0; // no properties
 
         // encode variable length
-        encodeVarInt(fd, sizeof(MqttConnect)+14+6);
+        encodeVarInt(fd, sizeof(MqttConnect) + 14 + 6);
 
         assert(Queue(fd, reinterpret_cast<const char *>(&connect), sizeof(MqttConnect)));
 
+        // Client Identifier, Will Properties, Will Topic, Will Payload, User Name, Password
 
-//Client Identifier, Will Properties, Will Topic, Will Payload, User Name, Password
-
-        //client id
+        // client id
         uint16_t client_id_len = htons(6);
         assert(Queue(fd, reinterpret_cast<const char *>(&client_id_len), sizeof(uint16_t)));
         assert(Queue(fd, "waldid", 6));
 
-        //user
+        // user
         client_id_len = htons(4);
         assert(Queue(fd, reinterpret_cast<const char *>(&client_id_len), sizeof(uint16_t)));
         assert(Queue(fd, "wald", 4));
 
-        //pw
+        // pw
         client_id_len = htons(4);
         assert(Queue(fd, reinterpret_cast<const char *>(&client_id_len), sizeof(uint16_t)));
         assert(Queue(fd, "wald", 4));
-
 
         return true;
       }
@@ -317,8 +382,83 @@ namespace eight99bushwick::piapiac
       return true;
     }
 
-
   private:
+    void log_reason_code(uint8_t code)
+    {
+      switch (code)
+      {
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_SUCCESS):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_SUCCESS");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_UNSPECIFIED_ERROR):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_UNSPECIFIED_ERROR");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_MALFORMED_PACKET):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_MALFORMED_PACKET");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_PROTOCOL_ERROR):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_PROTOCOL_ERROR");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_IMPLEMENTATION_SPECIFIC_ERROR):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_IMPLEMENTATION_SPECIFIC_ERROR");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_UNSUPPORTED_PROTOCOL_VERSION):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_UNSUPPORTED_PROTOCOL_VERSION");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_CLIENT_IDENTIFIER_NOT_VALID):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_CLIENT_IDENTIFIER_NOT_VALID");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_BAD_USER_NAME_OR_PASSWORD):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_BAD_USER_NAME_OR_PASSWORD");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_NOT_AUTHORIZED):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_NOT_AUTHORIZED");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_SERVER_UNAVAILABLE):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_SERVER_UNAVAILABLE");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_SERVER_BUSY):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_SERVER_BUSY");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_BANNED):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_BANNED");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_BAD_AUTHENTICATION_METHOD):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_BAD_AUTHENTICATION_METHOD");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_TOPIC_NAME_INVALID):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_TOPIC_NAME_INVALID");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_PACKET_TOO_LARGE):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_PACKET_TOO_LARGE");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_QUOTA_EXCEEDED):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_QUOTA_EXCEEDED");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_PAYLOAD_FORMAT_INVALID):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_PAYLOAD_FORMAT_INVALID");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_RETAIN_NOT_SUPPORTED):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_RETAIN_NOT_SUPPORTED");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_QOS_NOT_SUPPORTED):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_QOS_NOT_SUPPORTED");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_USE_ANOTHER_SERVER):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_USE_ANOTHER_SERVER");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_SERVER_MOVED):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_SERVER_MOVED");
+        break;
+      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_CONNECTION_RATE_EXCEEDED):
+        ECHIDNA_LOG_INFO(_logger, "MQ_RC_CONNECTION_RATE_EXCEEDED");
+        break;
+      default:
+        ECHIDNA_LOG_INFO(_logger, "Unknown reason code");
+        break;
+      }
+    }
+
     void encodeVarInt(int fd, uint8_t remainingLength)
     {
       do
@@ -332,7 +472,6 @@ namespace eight99bushwick::piapiac
         Queue(fd, reinterpret_cast<const char *>(&encodedByte), sizeof(uint8_t));
       } while (remainingLength > 0);
     }
-
 
     typedef struct MqttConnection
     {
@@ -364,6 +503,7 @@ namespace eight99bushwick::piapiac
     } con_type;
 
     std::unordered_map<int, std::shared_ptr<con_type>> _connections;
+    LogTrait _logger;
     write_cb_type _set_write;
   };
 } // namespace eight99bushwick
