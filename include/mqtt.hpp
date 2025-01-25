@@ -312,6 +312,7 @@ namespace eight99bushwick::piapiac
         assert(Queue(fd, reinterpret_cast<const char *>(&fixed), sizeof(fixed)));
         // Remaining Length field
         assert(Queue(fd, "\0", 1));
+        ECHIDNA_LOG_DEBUG(_logger, "MQTT PINGREQ -->");
         return true;
       }
 

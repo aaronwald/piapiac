@@ -174,7 +174,6 @@ int main(int argc [[maybe_unused]], char **argv)
                                {
                                 	 uint64_t x;
                                   ::read(fd, &x, sizeof(uint64_t)); 
-                                 ECHIDNA_LOG_INFO(context->_consoleLogger, "timer");
                                  context->_mqttManager->Ping(mqttFD);
                                  return 0; }, nullptr, nullptr);
 
