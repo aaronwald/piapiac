@@ -38,6 +38,7 @@ typedef eight99bushwick::piapiac::MqttManager<LogType, AnonStreamType, PublishSt
 
 // TODO: Create mqtt manager and mqtt state machine
 // TODO: Parse properties cleanly
+// TODO: Create a subscribe message with variable payload length counting
 
 typedef struct PiapiacContextS
 {
@@ -166,10 +167,11 @@ int main(int argc [[maybe_unused]], char **argv)
   context->_eventMgr->Register(mqttFD, mqttReadCB, mqttWriteCB, closeCB);
   // END mqtt
 
-  assert(context->_mqttManager->Connect(mqttFD));
+  uint16_t keepAlive = 15; // seconds
+  assert(context->_mqttManager->Connect(mqttFD, keepAlive));
 
   int timerFD = TimerFDHelper::CreateMonotonicNonBlock();
-  TimerFDHelper::SetRelativeRepeating(timerFD, 10, 0); // 10 seconds
+  TimerFDHelper::SetRelativeRepeating(timerFD, keepAlive, 0); // 10 seconds
   context->_eventMgr->Register(timerFD, [&mqttFD, &context](int fd [[maybe_unused]])
                                {
                                 	 uint64_t x;

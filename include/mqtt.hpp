@@ -13,6 +13,7 @@
 
 namespace eight99bushwick::piapiac
 {
+  const uint8_t MQTT_PROTOCOL_VERSION = 5;
   struct MqttFixed
   {
     uint8_t flags : 4;
@@ -314,7 +315,6 @@ namespace eight99bushwick::piapiac
       if (con)
       {
         con->_writeBuf->Push(data, len);
-        _set_write(fd);
         return true;
       }
       return false;
@@ -335,6 +335,7 @@ namespace eight99bushwick::piapiac
         assert(Queue(fd, reinterpret_cast<const char *>(&fixed), sizeof(fixed)));
         // Remaining Length field
         assert(Queue(fd, "\0", 1));
+        _set_write(fd);
         ECHIDNA_LOG_DEBUG(_logger, "MQTT PINGREQ -->");
         return true;
       }
@@ -342,7 +343,7 @@ namespace eight99bushwick::piapiac
       return false;
     }
 
-    bool Connect(int fd)
+    bool Connect(int fd, uint16_t keepAlive)
     {
       auto x = _connections.find(fd);
       if (x == _connections.end())
@@ -363,10 +364,10 @@ namespace eight99bushwick::piapiac
         connect.protocolName[3] = 'Q';
         connect.protocolName[4] = 'T';
         connect.protocolName[5] = 'T';
-        connect.version = 5;
+        connect.version = MQTT_PROTOCOL_VERSION;
         connect.flags = MqttConnectFlags::MQ_CF_USER_NAME_FLAG | MqttConnectFlags::MQ_CF_PASSWORD_FLAG | MqttConnectFlags::MQ_CF_CLEAN_SESSION;
-        connect.keepAlive = 60;     // 60 seconds
-        connect.propertyLength = 0; // no properties
+        connect.keepAlive = keepAlive; // 60 seconds
+        connect.propertyLength = 0;    // no properties
 
         encodeVarInt(fd, sizeof(MqttConnect) + 14 + 6);
 
@@ -389,7 +390,7 @@ namespace eight99bushwick::piapiac
         client_id_len = htons(4);
         assert(Queue(fd, reinterpret_cast<const char *>(&client_id_len), sizeof(uint16_t)));
         assert(Queue(fd, "wald", 4));
-
+        _set_write(fd);
         return true;
       }
 
