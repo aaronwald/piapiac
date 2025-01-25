@@ -49,6 +49,28 @@ namespace eight99bushwick::piapiac
     MQ_FLAG_PUBLISH_RETAIN = 0x01,
   };
 
+  inline MqttFlags operator|(MqttFlags a, MqttFlags b)
+  {
+    return static_cast<MqttFlags>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
+  }
+
+  enum class MqttConnectFlags : uint8_t
+  {
+    MQ_CF_USER_NAME_FLAG = 0x80,
+    MQ_CF_PASSWORD_FLAG = 0x40,
+    MQ_CF_WILL_RETAIN = 0x20,
+    MQ_CF_WILL_QOS2 = 0x10,
+    MQ_CF_WILL_QOS1 = 0x08,
+    MQ_CF_WILL_FLAG = 0x04,
+    MQ_CF_CLEAN_SESSION = 0x02,
+    MQ_CF_RESERVED = 0x01
+  };
+
+  inline MqttConnectFlags operator|(MqttConnectFlags a, MqttConnectFlags b)
+  {
+    return static_cast<MqttConnectFlags>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
+  }
+
   enum class MqttState : uint8_t
   {
     MQ_STATE_DISCONNECTED = 0,
@@ -91,7 +113,7 @@ namespace eight99bushwick::piapiac
   {
     uint8_t protocolName[6];
     uint8_t version;
-    uint8_t flags;
+    MqttConnectFlags flags;
     uint16_t keepAlive;
     uint8_t propertyLength;
   };
@@ -239,6 +261,7 @@ namespace eight99bushwick::piapiac
           ECHIDNA_LOG_DEBUG(_logger, "MQTT AUTH");
           break;
         default:
+          ECHIDNA_LOG_DEBUG(_logger, "Unknown MQTT packet type");
           break;
         }
       }
@@ -329,13 +352,8 @@ namespace eight99bushwick::piapiac
 
       if (con)
       {
-        // send connect
-        // MqttFixed fixed;
-        // fixed.control_packet_type = static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_CONNECT);
-        // fixed.flags = 0;
         uint8_t fixed = (static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_CONNECT) << 4);
         assert(Queue(fd, reinterpret_cast<const char *>(&fixed), sizeof(fixed)));
-        // Remaining Length field
 
         MqttConnect connect;
         ::memset(&connect, 0, sizeof(MqttConnect));
@@ -346,28 +364,28 @@ namespace eight99bushwick::piapiac
         connect.protocolName[4] = 'T';
         connect.protocolName[5] = 'T';
         connect.version = 5;
-        connect.flags = 0xC2;       // clean session
+        connect.flags = MqttConnectFlags::MQ_CF_USER_NAME_FLAG | MqttConnectFlags::MQ_CF_PASSWORD_FLAG | MqttConnectFlags::MQ_CF_CLEAN_SESSION;
         connect.keepAlive = 60;     // 60 seconds
         connect.propertyLength = 0; // no properties
 
-        // encode variable length
         encodeVarInt(fd, sizeof(MqttConnect) + 14 + 6);
 
         assert(Queue(fd, reinterpret_cast<const char *>(&connect), sizeof(MqttConnect)));
 
         // Client Identifier, Will Properties, Will Topic, Will Payload, User Name, Password
+        // TODO Check ecah flag, to see what we should sned,
 
-        // client id
+        // client id (always sent)
         uint16_t client_id_len = htons(6);
         assert(Queue(fd, reinterpret_cast<const char *>(&client_id_len), sizeof(uint16_t)));
         assert(Queue(fd, "waldid", 6));
 
-        // user
+        // will send user
         client_id_len = htons(4);
         assert(Queue(fd, reinterpret_cast<const char *>(&client_id_len), sizeof(uint16_t)));
         assert(Queue(fd, "wald", 4));
 
-        // pw
+        // will send password
         client_id_len = htons(4);
         assert(Queue(fd, reinterpret_cast<const char *>(&client_id_len), sizeof(uint16_t)));
         assert(Queue(fd, "wald", 4));
