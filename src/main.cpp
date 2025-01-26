@@ -33,12 +33,9 @@ typedef coypu::store::PositionedStream<AnonRWBufType> AnonStreamType;
 typedef coypu::store::MultiPositionedStreamLog<RWBufType> PublishStreamType;
 
 typedef eight99bushwick::piapiac::MqttManager<LogType, AnonStreamType, PublishStreamType> MqttManagerType;
-
 // END Types
 
-// TODO: Create mqtt manager and mqtt state machine
 // TODO: Parse properties cleanly
-// TODO: Create a subscribe message with variable payload length counting
 
 typedef struct PiapiacContextS
 {
@@ -169,7 +166,7 @@ int main(int argc [[maybe_unused]], char **argv)
 
   uint16_t keepAlive = 15; // seconds
   assert(context->_mqttManager->Connect(mqttFD, keepAlive));
-  assert(context->_mqttManager->Subscribe(mqttFD, "mostert/#"));
+  assert(context->_mqttManager->Subscribe(mqttFD, "#"));
 
   int timerFD = TimerFDHelper::CreateMonotonicNonBlock();
   TimerFDHelper::SetRelativeRepeating(timerFD, keepAlive, 0); // 10 seconds

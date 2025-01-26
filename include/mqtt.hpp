@@ -379,7 +379,7 @@ namespace eight99bushwick::piapiac
         con->_variableBuf->Push(reinterpret_cast<const char *>(&topic_len), sizeof(topic_len));
         con->_variableBuf->Push(topic.c_str(), topic.length());
 
-        uint8_t subOptions = 0; // TODO Options?
+        MqttSubscribeOptions subOptions = MqttSubscribeOptions::MQ_SO_MAX_QOS0; // TODO Options?
         con->_variableBuf->Push(reinterpret_cast<const char *>(&subOptions), sizeof(subOptions));
 
         encodeVarInt(fd, con->_variableBuf->Available());
