@@ -36,6 +36,7 @@ typedef eight99bushwick::piapiac::MqttManager<LogType, AnonStreamType, PublishSt
 // END Types
 
 // TODO: Parse properties cleanly
+// TODO: Parse publish msgs
 
 typedef struct PiapiacContextS
 {

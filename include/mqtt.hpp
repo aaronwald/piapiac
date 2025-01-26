@@ -229,14 +229,38 @@ namespace eight99bushwick::piapiac
           ECHIDNA_LOG_DEBUG(_logger, "MQTT CONNECT");
           break;
         case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_CONNACK):
-          // TODO Create struct
-          // TODO Connect Acknowledge Flags, Connect Reason Code, and Properties.
           ECHIDNA_LOG_DEBUG(_logger, "MQTT CONNACK");
           log_reason_code(buf[1]);
           break;
+
         case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBLISH):
-          ECHIDNA_LOG_DEBUG(_logger, "MQTT PUBLISH");
-          break;
+        {
+          bool retain = fixed.flags & static_cast<uint8_t>(MqttFlags::MQ_FLAG_PUBLISH_RETAIN);
+          bool dup = fixed.flags & static_cast<uint8_t>(MqttFlags::MQ_FLAG_PUBLISH_DUP);
+          bool atLeastonce = fixed.flags & static_cast<uint8_t>(MqttFlags::MQ_FLAG_PUBLISH_QOS2);
+          bool once = fixed.flags & static_cast<uint8_t>(MqttFlags::MQ_FLAG_PUBLISH_QOS1);
+          ECHIDNA_LOG_DEBUG(_logger, "MQTT PUBLISH retain[{}] dup[{}] atLeastonce[{}] once[{}] len[{}]",
+                            retain ? "T" : "F",
+                            dup ? "T" : "F",
+                            atLeastonce ? "T" : "F",
+                            once ? "T" : "F",
+                            len);
+
+          uint16_t topic_len = ntohs(*reinterpret_cast<uint16_t *>(buf));
+          std::string topic(&buf[2], topic_len);
+          ECHIDNA_LOG_DEBUG(_logger, "topic[{}]", topic);
+
+          uint16_t packet_id = ntohs(*reinterpret_cast<uint16_t *>(&buf[2 + topic_len]));
+          ECHIDNA_LOG_DEBUG(_logger, "packet_id[{}]", packet_id);
+
+          // uint8_t property_len = buf[4 + topic_len];
+          // ECHIDNA_LOG_DEBUG(_logger, "property_len[{}]", property_len);
+
+          // uint16_t payload_len = len - (5 + topic_len + property_len);
+          // std::string payload(&buf[5 + topic_len + property_len], payload_len);
+          // ECHIDNA_LOG_DEBUG(_logger, "payload[{}]", payload);
+        }
+        break;
         case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBACK):
           ECHIDNA_LOG_DEBUG(_logger, "MQTT PUBACK");
           break;
@@ -379,10 +403,10 @@ namespace eight99bushwick::piapiac
         con->_variableBuf->Push(reinterpret_cast<const char *>(&topic_len), sizeof(topic_len));
         con->_variableBuf->Push(topic.c_str(), topic.length());
 
-        MqttSubscribeOptions subOptions = MqttSubscribeOptions::MQ_SO_MAX_QOS0; // TODO Options?
+        MqttSubscribeOptions subOptions = MqttSubscribeOptions::MQ_SO_MAX_QOS0;
         con->_variableBuf->Push(reinterpret_cast<const char *>(&subOptions), sizeof(subOptions));
 
-        encodeVarInt(fd, con->_variableBuf->Available());
+        encodeVarInt(con, con->_variableBuf->Available());
         con->_variableBuf->PopAll([con](const char *data, uint64_t len) -> bool
                                   {
           con->_writeBuf->Push(data, len);
@@ -421,12 +445,12 @@ namespace eight99bushwick::piapiac
         connect.keepAlive = keepAlive; // 60 seconds
         connect.propertyLength = 0;    // no properties
 
-        encodeVarInt(fd, sizeof(MqttConnect) + 14 + 6);
+        encodeVarInt(con, sizeof(MqttConnect) + 14 + 6);
 
         assert(Queue(fd, reinterpret_cast<const char *>(&connect), sizeof(MqttConnect)));
 
         // Client Identifier, Will Properties, Will Topic, Will Payload, User Name, Password
-        // TODO Check ecah flag, to see what we should sned,
+        // TODO Check each flag, to see what we should sned,
 
         // client id (always sent)
         uint16_t client_id_len = htons(6);
@@ -531,20 +555,6 @@ namespace eight99bushwick::piapiac
       }
     }
 
-    void encodeVarInt(int fd, uint8_t remainingLength)
-    {
-      do
-      {
-        uint8_t encodedByte = remainingLength % 128;
-        remainingLength /= 128;
-        if (remainingLength > 0)
-        {
-          encodedByte |= 128;
-        }
-        Queue(fd, reinterpret_cast<const char *>(&encodedByte), sizeof(uint8_t));
-      } while (remainingLength > 0);
-    }
-
     typedef struct MqttConnection
     {
       std::shared_ptr<coypu::buf::BipBuf<char, uint64_t>> _writeBuf;
@@ -585,6 +595,21 @@ namespace eight99bushwick::piapiac
       char *_writeData;
       char *_variableData;
     } con_type;
+
+    void encodeVarInt(std::shared_ptr<con_type> &con, uint8_t remainingLength)
+    {
+      do
+      {
+        uint8_t encodedByte = remainingLength % 128;
+        remainingLength /= 128;
+        if (remainingLength > 0)
+        {
+          encodedByte |= 128;
+        }
+
+        con->_writeBuf->Push(reinterpret_cast<const char *>(&encodedByte), sizeof(uint8_t));
+      } while (remainingLength > 0);
+    }
 
     std::unordered_map<int, std::shared_ptr<con_type>> _connections;
     LogTrait _logger;
