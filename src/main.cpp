@@ -169,6 +169,7 @@ int main(int argc [[maybe_unused]], char **argv)
 
   uint16_t keepAlive = 15; // seconds
   assert(context->_mqttManager->Connect(mqttFD, keepAlive));
+  assert(context->_mqttManager->Subscribe(mqttFD, "mostert/#"));
 
   int timerFD = TimerFDHelper::CreateMonotonicNonBlock();
   TimerFDHelper::SetRelativeRepeating(timerFD, keepAlive, 0); // 10 seconds

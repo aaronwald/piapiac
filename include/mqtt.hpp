@@ -50,6 +50,18 @@ namespace eight99bushwick::piapiac
     MQ_FLAG_PUBLISH_RETAIN = 0x01,
   };
 
+  enum class MqttSubscribeOptions : uint8_t
+  {
+    MQ_SO_MAX_QOS0 = 0x01,
+    MQ_SO_MAX_QOS1 = 0x02,
+    MQ_SO_NO_LOCAL = 0x04,
+    MQ_SO_NO_RETAIN = 0x08,
+    MQ_SO_RETAIN_B0 = 0x10,
+    MQ_SO_RETAIN_B1 = 0x20,
+    MQ_SO_RESERVED0 = 0x40,
+    MQ_SO_RESERVED1 = 0x80
+  };
+
   inline MqttFlags operator|(MqttFlags a, MqttFlags b)
   {
     return static_cast<MqttFlags>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
@@ -126,7 +138,7 @@ namespace eight99bushwick::piapiac
   public:
     typedef std::function<int(int)> write_cb_type;
 
-    MqttManager(LogTrait logger, write_cb_type set_write) : _logger(logger), _set_write(set_write)
+    MqttManager(LogTrait logger, write_cb_type set_write) : _logger(logger), _set_write(set_write), _nextPacketIdentifier(1)
     {
     }
     virtual ~MqttManager()
@@ -332,11 +344,51 @@ namespace eight99bushwick::piapiac
       {
         // send ping
         uint8_t fixed = (static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PINGREQ) << 4);
-        assert(Queue(fd, reinterpret_cast<const char *>(&fixed), sizeof(fixed)));
-        // Remaining Length field
-        assert(Queue(fd, "\0", 1));
+
+        con->_writeBuf->Push(reinterpret_cast<const char *>(&fixed), sizeof(fixed));
+        con->_writeBuf->Push("\0", 1);
+
         _set_write(fd);
         ECHIDNA_LOG_DEBUG(_logger, "MQTT PINGREQ -->");
+        return true;
+      }
+
+      return false;
+    }
+
+    bool Subscribe(int fd, std::string topic)
+    {
+      auto x = _connections.find(fd);
+      if (x == _connections.end())
+        return false;
+
+      std::shared_ptr<con_type> &con = (*x).second;
+
+      if (con)
+      {
+        // reserved 0010 required
+        uint8_t fixed = (static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_SUBSCRIBE) << 4) | 0x02;
+        con->_writeBuf->Push(reinterpret_cast<const char *>(&fixed), sizeof(fixed));
+
+        // variable header
+        uint16_t packet_id = _nextPacketIdentifier++;
+        con->_variableBuf->Push(reinterpret_cast<const char *>(&packet_id), sizeof(packet_id));
+        con->_variableBuf->Push("\0", 1); // properties
+
+        uint16_t topic_len = htons(topic.length());
+        con->_variableBuf->Push(reinterpret_cast<const char *>(&topic_len), sizeof(topic_len));
+        con->_variableBuf->Push(topic.c_str(), topic.length());
+
+        uint8_t subOptions = 0; // TODO Options?
+        con->_variableBuf->Push(reinterpret_cast<const char *>(&subOptions), sizeof(subOptions));
+
+        encodeVarInt(fd, con->_variableBuf->Available());
+        con->_variableBuf->PopAll([con](const char *data, uint64_t len) -> bool
+                                  {
+          con->_writeBuf->Push(data, len);
+          return true; }, con->_variableBuf->Available());
+
+        _set_write(fd);
         return true;
       }
 
@@ -496,6 +548,7 @@ namespace eight99bushwick::piapiac
     typedef struct MqttConnection
     {
       std::shared_ptr<coypu::buf::BipBuf<char, uint64_t>> _writeBuf;
+      std::shared_ptr<coypu::buf::BipBuf<char, uint64_t>> _variableBuf;
 
       MqttConnection(int fd,
                      std::function<int(int, const struct iovec *, int)> readv,
@@ -505,13 +558,23 @@ namespace eight99bushwick::piapiac
       {
         uint64_t capacity = 8192;
         _writeData = new char[capacity];
+        _variableData = new char[capacity];
+
+        // data to send to the socket
         _writeBuf = std::make_shared<coypu::buf::BipBuf<char, uint64_t>>(_writeData, capacity);
+
+        // use this for variable length data
+        // mqtt requires this double copy because of the variable length nature
+        _variableBuf = std::make_shared<coypu::buf::BipBuf<char, uint64_t>>(_variableData, capacity);
       }
 
       ~MqttConnection()
       {
         if (_writeData)
           delete[] _writeData;
+
+        if (_variableData)
+          delete[] _variableData;
       }
 
       int _fd;
@@ -520,10 +583,12 @@ namespace eight99bushwick::piapiac
       std::shared_ptr<StreamTrait> _dataStream;
       std::shared_ptr<PublishTrait> _mqttOutStream;
       char *_writeData;
+      char *_variableData;
     } con_type;
 
     std::unordered_map<int, std::shared_ptr<con_type>> _connections;
     LogTrait _logger;
     write_cb_type _set_write;
+    uint16_t _nextPacketIdentifier;
   };
 } // namespace eight99bushwick
