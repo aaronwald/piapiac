@@ -158,7 +158,12 @@ int main(int argc [[maybe_unused]], char **argv)
   std::function<int(int, const struct iovec *, int)> writeMQTTCB =
       std::bind(::writev, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 
-  context->_mqttManager->Register(mqttFD, readMQTTCB, writeMQTTCB, context->_mqttStreamSP, nullptr);
+  auto mqttCB = [&logger](const std::string &topic, const char *buf, uint32_t len)
+  {
+    ECHIDNA_LOG_INFO(logger, "received msg: {} -->[{}]", topic, std::string(buf, len));
+  };
+
+  context->_mqttManager->Register(mqttFD, readMQTTCB, writeMQTTCB, mqttCB, context->_mqttStreamSP, nullptr);
 
   std::function<int(int)> mqttReadCB = std::bind(&MqttManagerType::Read, context->_mqttManager, std::placeholders::_1);
   std::function<int(int)> mqttWriteCB = std::bind(&MqttManagerType::Write, context->_mqttManager, std::placeholders::_1);

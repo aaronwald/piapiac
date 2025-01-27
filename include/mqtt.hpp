@@ -144,6 +144,7 @@ namespace eight99bushwick::piapiac
   {
   public:
     typedef std::function<int(int)> write_cb_type;
+    typedef std::function<void(const std::string &, const char *, uint32_t)> msg_cb_type;
 
     MqttManager(LogTrait logger, write_cb_type set_write) : _logger(logger), _set_write(set_write), _nextPacketIdentifier(1)
     {
@@ -159,10 +160,11 @@ namespace eight99bushwick::piapiac
     int Register(int fd,
                  std::function<int(int, const struct iovec *, int)> readv,
                  std::function<int(int, const struct iovec *, int)> writev,
+                 msg_cb_type msgCB,
                  const std::shared_ptr<StreamTrait> &dataStream,
                  const std::shared_ptr<PublishTrait> &mqttOutStream)
     {
-      auto sp = std::make_shared<con_type>(fd, readv, writev, dataStream, mqttOutStream);
+      auto sp = std::make_shared<con_type>(fd, readv, writev, msgCB, dataStream, mqttOutStream);
       auto p = std::make_pair(fd, sp);
       assert(_connections.find(fd) == _connections.end());
 
@@ -255,7 +257,7 @@ namespace eight99bushwick::piapiac
           buf_offset += 2;
           std::string topic(&buf[buf_offset], topic_len);
           buf_offset += topic_len;
-          ECHIDNA_LOG_INFO(_logger, "topic[{}] len[{}]", topic, topic_len);
+          ECHIDNA_LOG_DEBUG(_logger, "topic[{}] len[{}]", topic, topic_len);
 
           // Only present if QoS > 0
           uint16_t packet_id = 0;
@@ -280,9 +282,7 @@ namespace eight99bushwick::piapiac
           // skip properties
           uint32_t payload_len = len - buf_offset;
           ECHIDNA_LOG_DEBUG(_logger, "payload_len[{}]", payload_len);
-
-          std::string payload(&buf[buf_offset], payload_len);
-          ECHIDNA_LOG_INFO(_logger, "payload[{}]", payload);
+          con->_msgCB(topic, &buf[buf_offset], payload_len);
 
           if (once)
           {
@@ -651,8 +651,9 @@ namespace eight99bushwick::piapiac
       MqttConnection(int fd,
                      std::function<int(int, const struct iovec *, int)> readv,
                      std::function<int(int, const struct iovec *, int)> writev,
+                     msg_cb_type msgCB,
                      const std::shared_ptr<StreamTrait> &dataStream,
-                     const std::shared_ptr<PublishTrait> &mqttOutStream) : _fd(fd), _readv(readv), _writev(writev), _dataStream(dataStream), _mqttOutStream(mqttOutStream)
+                     const std::shared_ptr<PublishTrait> &mqttOutStream) : _fd(fd), _readv(readv), _writev(writev), _msgCB(msgCB), _dataStream(dataStream), _mqttOutStream(mqttOutStream)
       {
         uint64_t capacity = 8192;
         _writeData = new char[capacity];
@@ -678,6 +679,7 @@ namespace eight99bushwick::piapiac
       int _fd;
       std::function<int(int, const struct iovec *, int)> _readv;
       std::function<int(int, const struct iovec *, int)> _writev;
+      msg_cb_type _msgCB;
       std::shared_ptr<StreamTrait> _dataStream;
       std::shared_ptr<PublishTrait> _mqttOutStream;
       char *_writeData;
