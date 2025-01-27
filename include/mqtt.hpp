@@ -193,8 +193,6 @@ namespace eight99bushwick::piapiac
       if (r < 0)
         return -3;
 
-      // TODO: This is wrong . Dont need 2 more bytes for it to be valid
-
       // need at least one byte
       while (con->_dataStream->Available() >= sizeof(MqttFixed))
       {
@@ -257,7 +255,7 @@ namespace eight99bushwick::piapiac
           buf_offset += 2;
           std::string topic(&buf[buf_offset], topic_len);
           buf_offset += topic_len;
-          ECHIDNA_LOG_DEBUG(_logger, "topic[{}] len[{}]", topic, topic_len);
+          ECHIDNA_LOG_INFO(_logger, "topic[{}] len[{}]", topic, topic_len);
 
           // Only present if QoS > 0
           uint16_t packet_id = 0;
@@ -284,9 +282,8 @@ namespace eight99bushwick::piapiac
           ECHIDNA_LOG_DEBUG(_logger, "payload_len[{}]", payload_len);
 
           std::string payload(&buf[buf_offset], payload_len);
-          ECHIDNA_LOG_DEBUG(_logger, "payload[{}]", payload);
+          ECHIDNA_LOG_INFO(_logger, "payload[{}]", payload);
 
-          // TODO
           if (once)
           {
             assert(packet_id > 0);
@@ -442,7 +439,7 @@ namespace eight99bushwick::piapiac
         con->_writeBuf->Push("\0", 1); // property len
 
         _set_write(fd);
-        ECHIDNA_LOG_DEBUG(_logger, "MQTT PUB ACK id[{}] code[:x] -->", packetId, *reinterpret_cast<char *>(&reasonCode));
+        ECHIDNA_LOG_DEBUG(_logger, "MQTT PUB ACK id[{}] code[{:x}] -->", packetId, *reinterpret_cast<char *>(&reasonCode));
         return true;
       }
 
@@ -471,7 +468,7 @@ namespace eight99bushwick::piapiac
         con->_writeBuf->Push("\0", 1); // property len
 
         _set_write(fd);
-        ECHIDNA_LOG_DEBUG(_logger, "MQTT PUB REC id[{}] code[:x] -->", packetId, *reinterpret_cast<char *>(&reasonCode));
+        ECHIDNA_LOG_DEBUG(_logger, "MQTT PUB REC id[{}] code[{:x}] -->", packetId, *reinterpret_cast<char *>(&reasonCode));
         return true;
       }
 
