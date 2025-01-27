@@ -104,6 +104,7 @@ namespace eight99bushwick::piapiac
   enum class MqttReasonCode : uint8_t
   {
     MQ_RC_SUCCESS = 0,
+    MQ_RC_NO_MATCHING_SUBSCRIBERS = 0x10,
     MQ_RC_UNSPECIFIED_ERROR = 0x80,
     MQ_RC_MALFORMED_PACKET = 0x81,
     MQ_RC_PROTOCOL_ERROR = 0x82,
@@ -117,6 +118,7 @@ namespace eight99bushwick::piapiac
     MQ_RC_BANNED = 0x8A,
     MQ_RC_BAD_AUTHENTICATION_METHOD = 0x8C,
     MQ_RC_TOPIC_NAME_INVALID = 0x90,
+    MQ_RC_PACKET_IDENTIFIER_IN_USE = 0x91,
     MQ_RC_PACKET_TOO_LARGE = 0x95,
     MQ_RC_QUOTA_EXCEEDED = 0x97,
     MQ_RC_PAYLOAD_FORMAT_INVALID = 0x99,
@@ -258,25 +260,14 @@ namespace eight99bushwick::piapiac
           ECHIDNA_LOG_DEBUG(_logger, "topic[{}] len[{}]", topic, topic_len);
 
           // Only present if QoS > 0
+          uint16_t packet_id = 0;
           if (atLeastOnce || once)
           {
-            uint16_t packet_id = ntohs(*reinterpret_cast<uint16_t *>(&buf[buf_offset])); // 2
+            packet_id = ntohs(*reinterpret_cast<uint16_t *>(&buf[buf_offset])); // 2
             buf_offset += 2;
             ECHIDNA_LOG_DEBUG(_logger, "packet_id[{}]", packet_id);
           }
-          // var int
-          // TODO: Implement proper var int
-          /*
-          multiplier = 1
-value = 0
-do
-   encodedByte = 'next byte from stream'
-   value += (encodedByte AND 127) * multiplier
-   if (multiplier > 128*128*128)
-      throw Error(Malformed Variable Byte Integer)
-   multiplier *= 128
-while ((encodedByte AND 128) != 0)
-          */
+
           uint32_t multiplier = 1;
           uint32_t property_len = 0;
           do
@@ -298,11 +289,13 @@ while ((encodedByte AND 128) != 0)
           // TODO
           if (once)
           {
-            // TODO: Send PUBACK
+            assert(packet_id > 0);
+            PubAck(fd, packet_id, MqttReasonCode::MQ_RC_SUCCESS);
           }
           if (atLeastOnce)
           {
-            // TODO: Send PUBREC
+            assert(packet_id > 0);
+            PubRec(fd, packet_id, MqttReasonCode::MQ_RC_SUCCESS);
           }
         }
         break;
@@ -421,6 +414,64 @@ while ((encodedByte AND 128) != 0)
 
         _set_write(fd);
         ECHIDNA_LOG_DEBUG(_logger, "MQTT PINGREQ -->");
+        return true;
+      }
+
+      return false;
+    }
+
+    bool PubAck(int fd, uint16_t packetId, MqttReasonCode reasonCode)
+    {
+      auto x = _connections.find(fd);
+      if (x == _connections.end())
+        return false;
+
+      std::shared_ptr<con_type> &con = (*x).second;
+
+      if (con)
+      {
+        // send ping
+        uint8_t fixed = (static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBACK) << 4);
+
+        con->_writeBuf->Push(reinterpret_cast<const char *>(&fixed), sizeof(fixed));
+        uint8_t remainingLen = 4;
+        con->_writeBuf->Push(reinterpret_cast<const char *>(&remainingLen), sizeof(remainingLen));
+        uint16_t packet_id = htons(packetId);
+        con->_writeBuf->Push(reinterpret_cast<const char *>(&packet_id), sizeof(packetId));
+        con->_writeBuf->Push(reinterpret_cast<const char *>(&reasonCode), sizeof(reasonCode));
+        con->_writeBuf->Push("\0", 1); // property len
+
+        _set_write(fd);
+        ECHIDNA_LOG_DEBUG(_logger, "MQTT PUB ACK id[{}] code[:x] -->", packetId, *reinterpret_cast<char *>(&reasonCode));
+        return true;
+      }
+
+      return false;
+    }
+
+    bool PubRec(int fd, uint16_t packetId, MqttReasonCode reasonCode)
+    {
+      auto x = _connections.find(fd);
+      if (x == _connections.end())
+        return false;
+
+      std::shared_ptr<con_type> &con = (*x).second;
+
+      if (con)
+      {
+        // send ping
+        uint8_t fixed = (static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBREC) << 4);
+
+        con->_writeBuf->Push(reinterpret_cast<const char *>(&fixed), sizeof(fixed));
+        uint8_t remainingLen = 4;
+        con->_writeBuf->Push(reinterpret_cast<const char *>(&remainingLen), sizeof(remainingLen));
+        uint16_t packet_id = htons(packetId);
+        con->_writeBuf->Push(reinterpret_cast<const char *>(&packet_id), sizeof(packetId));
+        con->_writeBuf->Push(reinterpret_cast<const char *>(&reasonCode), sizeof(reasonCode));
+        con->_writeBuf->Push("\0", 1); // property len
+
+        _set_write(fd);
+        ECHIDNA_LOG_DEBUG(_logger, "MQTT PUB REC id[{}] code[:x] -->", packetId, *reinterpret_cast<char *>(&reasonCode));
         return true;
       }
 
