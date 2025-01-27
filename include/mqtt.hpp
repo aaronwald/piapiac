@@ -376,23 +376,6 @@ namespace eight99bushwick::piapiac
       return 0;
     }
 
-    // Queue data
-    bool Queue(int fd, const char *data, uint64_t len)
-    {
-      auto x = _connections.find(fd);
-      if (x == _connections.end())
-        return false;
-
-      std::shared_ptr<con_type> &con = (*x).second;
-
-      if (con)
-      {
-        con->_writeBuf->Push(data, len);
-        return true;
-      }
-      return false;
-    }
-
     bool Ping(int fd)
     {
       auto x = _connections.find(fd);
@@ -491,6 +474,7 @@ namespace eight99bushwick::piapiac
 
         // variable header
         uint16_t packet_id = _nextPacketIdentifier++;
+        assert(con->_variableBuf->IsEmpty());
         con->_variableBuf->Push(reinterpret_cast<const char *>(&packet_id), sizeof(packet_id));
         con->_variableBuf->Push("\0", 1); // properties
 
@@ -501,6 +485,7 @@ namespace eight99bushwick::piapiac
         MqttSubscribeOptions subOptions = MqttSubscribeOptions::MQ_SO_MAX_QOS0;
         con->_variableBuf->Push(reinterpret_cast<const char *>(&subOptions), sizeof(subOptions));
 
+        // encode variableBuf
         encodeVarInt(con, con->_variableBuf->Available());
         con->_variableBuf->PopAll([con](const char *data, uint64_t len) -> bool
                                   {
@@ -514,7 +499,7 @@ namespace eight99bushwick::piapiac
       return false;
     }
 
-    bool Connect(int fd, uint16_t keepAlive)
+    bool Connect(int fd, uint16_t keepAlive, const std::string &clientId, const std::string &userName, const std::string &password, bool cleanSession = true)
     {
       auto x = _connections.find(fd);
       if (x == _connections.end())
@@ -525,7 +510,9 @@ namespace eight99bushwick::piapiac
       if (con)
       {
         uint8_t fixed = (static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_CONNECT) << 4);
-        assert(Queue(fd, reinterpret_cast<const char *>(&fixed), sizeof(fixed)));
+        con->_writeBuf->Push(reinterpret_cast<const char *>(&fixed), sizeof(fixed));
+
+        assert(con->_variableBuf->IsEmpty());
 
         MqttConnect connect;
         ::memset(&connect, 0, sizeof(MqttConnect));
@@ -536,32 +523,38 @@ namespace eight99bushwick::piapiac
         connect.protocolName[4] = 'T';
         connect.protocolName[5] = 'T';
         connect.version = MQTT_PROTOCOL_VERSION;
-        connect.flags = MqttConnectFlags::MQ_CF_USER_NAME_FLAG | MqttConnectFlags::MQ_CF_PASSWORD_FLAG | MqttConnectFlags::MQ_CF_CLEAN_SESSION;
+        connect.flags = MqttConnectFlags::MQ_CF_USER_NAME_FLAG | MqttConnectFlags::MQ_CF_PASSWORD_FLAG;
+        if (cleanSession)
+        {
+          connect.flags = MqttConnectFlags::MQ_CF_USER_NAME_FLAG | MqttConnectFlags::MQ_CF_PASSWORD_FLAG | MqttConnectFlags::MQ_CF_CLEAN_SESSION;
+        }
         connect.keepAlive = keepAlive; // 60 seconds
         connect.propertyLength = 0;    // no properties
-
-        encodeVarInt(con, sizeof(MqttConnect) + 14 + 6);
-
-        assert(Queue(fd, reinterpret_cast<const char *>(&connect), sizeof(MqttConnect)));
-
-        // Client Identifier, Will Properties, Will Topic, Will Payload, User Name, Password
-        // TODO Check each flag, to see what we should sned,
+        assert(con->_variableBuf->Push(reinterpret_cast<const char *>(&connect), sizeof(MqttConnect)));
 
         // client id (always sent)
-        uint16_t client_id_len = htons(6);
-        assert(Queue(fd, reinterpret_cast<const char *>(&client_id_len), sizeof(uint16_t)));
-        assert(Queue(fd, "waldid", 6));
+        uint16_t str_len = htons(clientId.length());
+        assert(con->_variableBuf->Push(reinterpret_cast<const char *>(&str_len), sizeof(uint16_t)));
+        assert(con->_variableBuf->Push(clientId.c_str(), clientId.length()));
 
         // will send user
-        client_id_len = htons(4);
-        assert(Queue(fd, reinterpret_cast<const char *>(&client_id_len), sizeof(uint16_t)));
-        assert(Queue(fd, "wald", 4));
+        str_len = htons(userName.length());
+        assert(con->_variableBuf->Push(reinterpret_cast<const char *>(&str_len), sizeof(uint16_t)));
+        assert(con->_variableBuf->Push(userName.c_str(), userName.length()));
 
         // will send password
-        client_id_len = htons(4);
-        assert(Queue(fd, reinterpret_cast<const char *>(&client_id_len), sizeof(uint16_t)));
-        assert(Queue(fd, "wald", 4));
+        str_len = htons(password.length());
+        assert(con->_variableBuf->Push(reinterpret_cast<const char *>(&str_len), sizeof(uint16_t)));
+        assert(con->_variableBuf->Push(password.c_str(), password.length()));
+
+        encodeVarInt(con, con->_variableBuf->Available());
+        con->_variableBuf->PopAll([con](const char *data, uint64_t len) -> bool
+                                  {
+          con->_writeBuf->Push(data, len);
+          return true; }, con->_variableBuf->Available());
+
         _set_write(fd);
+
         return true;
       }
 
@@ -709,7 +702,7 @@ namespace eight99bushwick::piapiac
     int decodeVarInt(std::shared_ptr<con_type> &con, uint32_t &remainingLength, uint32_t offset)
     {
       remainingLength = 0;
-      uint8_t multiplier = 1;
+      uint32_t multiplier = 1;
       char encodedByte = 0;
       int count = 0;
       do
