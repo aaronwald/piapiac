@@ -67,6 +67,11 @@ namespace eight99bushwick::piapiac
     return static_cast<MqttFlags>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
   }
 
+  inline MqttFlags operator&(MqttFlags a, MqttFlags b)
+  {
+    return static_cast<MqttFlags>(static_cast<uint8_t>(a) & static_cast<uint8_t>(b));
+  }
+
   enum class MqttConnectFlags : uint8_t
   {
     MQ_CF_USER_NAME_FLAG = 0x80,
@@ -192,6 +197,7 @@ namespace eight99bushwick::piapiac
         char f;
         con->_dataStream->Peak(0, f);
         fixed = *reinterpret_cast<MqttFixed *>(&f);
+        ECHIDNA_LOG_DEBUG(_logger, "MQTT Fixed[{:x}]", f);
 
         char a, b;
         uint16_t len = 0;
@@ -235,30 +241,64 @@ namespace eight99bushwick::piapiac
 
         case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBLISH):
         {
-          bool retain = fixed.flags & static_cast<uint8_t>(MqttFlags::MQ_FLAG_PUBLISH_RETAIN);
-          bool dup = fixed.flags & static_cast<uint8_t>(MqttFlags::MQ_FLAG_PUBLISH_DUP);
-          bool atLeastonce = fixed.flags & static_cast<uint8_t>(MqttFlags::MQ_FLAG_PUBLISH_QOS2);
-          bool once = fixed.flags & static_cast<uint8_t>(MqttFlags::MQ_FLAG_PUBLISH_QOS1);
+          MqttFlags flags = static_cast<MqttFlags>(fixed.flags);
+          bool retain = (flags & MqttFlags::MQ_FLAG_PUBLISH_RETAIN) == MqttFlags::MQ_FLAG_PUBLISH_RETAIN;
+          bool dup = (flags & MqttFlags::MQ_FLAG_PUBLISH_DUP) == MqttFlags::MQ_FLAG_PUBLISH_DUP;
+          bool atLeastOnce = (flags & MqttFlags::MQ_FLAG_PUBLISH_QOS2) == MqttFlags::MQ_FLAG_PUBLISH_QOS2;
+          bool once = (flags & MqttFlags::MQ_FLAG_PUBLISH_QOS1) == MqttFlags::MQ_FLAG_PUBLISH_QOS1;
+
+          ECHIDNA_LOG_DEBUG(_logger, "MQTT Header Flags[{}]", static_cast<uint8_t>(fixed.flags));
           ECHIDNA_LOG_DEBUG(_logger, "MQTT PUBLISH retain[{}] dup[{}] atLeastonce[{}] once[{}] len[{}]",
                             retain ? "T" : "F",
                             dup ? "T" : "F",
-                            atLeastonce ? "T" : "F",
+                            atLeastOnce ? "T" : "F",
                             once ? "T" : "F",
                             len);
 
-          uint16_t topic_len = ntohs(*reinterpret_cast<uint16_t *>(buf));
-          std::string topic(&buf[2], topic_len);
-          ECHIDNA_LOG_DEBUG(_logger, "topic[{}]", topic);
+          uint32_t buf_offset = 0;
+          uint16_t topic_len = ntohs(*reinterpret_cast<uint16_t *>(buf)); // 2
+          buf_offset += 2;
+          std::string topic(&buf[buf_offset], topic_len);
+          buf_offset += topic_len;
+          ECHIDNA_LOG_DEBUG(_logger, "topic[{}] len[{}]", topic, topic_len);
 
-          uint16_t packet_id = ntohs(*reinterpret_cast<uint16_t *>(&buf[2 + topic_len]));
-          ECHIDNA_LOG_DEBUG(_logger, "packet_id[{}]", packet_id);
+          // Only present if QoS > 0
+          if (atLeastOnce || once)
+          {
+            uint16_t packet_id = ntohs(*reinterpret_cast<uint16_t *>(&buf[buf_offset])); // 2
+            buf_offset += 2;
+            ECHIDNA_LOG_DEBUG(_logger, "packet_id[{}]", packet_id);
+          }
+          // var int
+          // TODO: Implement proper var int
+          /*
+          multiplier = 1
+value = 0
+do
+   encodedByte = 'next byte from stream'
+   value += (encodedByte AND 127) * multiplier
+   if (multiplier > 128*128*128)
+      throw Error(Malformed Variable Byte Integer)
+   multiplier *= 128
+while ((encodedByte AND 128) != 0)
+          */
+          uint32_t multiplier = 1;
+          uint32_t property_len = 0;
+          do
+          {
+            property_len += (buf[buf_offset] & 127) * multiplier;
+            if (multiplier > 128 * 128 * 128)
+              throw std::runtime_error("Malformed Variable Byte Integer");
+            multiplier *= 128;
+          } while ((buf[buf_offset++] & 128) != 0);
+          ECHIDNA_LOG_DEBUG(_logger, "property_len[{}]", property_len);
 
-          // uint8_t property_len = buf[4 + topic_len];
-          // ECHIDNA_LOG_DEBUG(_logger, "property_len[{}]", property_len);
+          // skip properties
+          uint32_t payload_len = len - buf_offset;
+          ECHIDNA_LOG_DEBUG(_logger, "payload_len[{}]", payload_len);
 
-          // uint16_t payload_len = len - (5 + topic_len + property_len);
-          // std::string payload(&buf[5 + topic_len + property_len], payload_len);
-          // ECHIDNA_LOG_DEBUG(_logger, "payload[{}]", payload);
+          std::string payload(&buf[buf_offset], payload_len);
+          ECHIDNA_LOG_DEBUG(_logger, "payload[{}]", payload);
         }
         break;
         case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBACK):
