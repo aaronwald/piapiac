@@ -191,7 +191,10 @@ namespace eight99bushwick::piapiac
       if (r < 0)
         return -3;
 
-      if (con->_dataStream->Available() >= (sizeof(MqttFixed) + 2))
+      // TODO: This is wrong . Dont need 2 more bytes for it to be valid
+
+      // need at least one byte
+      while (con->_dataStream->Available() >= sizeof(MqttFixed))
       {
         MqttFixed fixed;
         char f;
@@ -199,31 +202,23 @@ namespace eight99bushwick::piapiac
         fixed = *reinterpret_cast<MqttFixed *>(&f);
         ECHIDNA_LOG_DEBUG(_logger, "MQTT Fixed[{:x}]", f);
 
-        char a, b;
-        uint16_t len = 0;
-
-        // TODO: Cleanup
-        // we have to peak to get the variable length
-        // Peak at 0, 1, 2,  (assumge 2 bytes max length)
-        con->_dataStream->Peak(1, a);
-        int skip = 1;
-        if (a & 0x80)
+        uint32_t len = 0;
+        int varIntLen = decodeVarInt(con, len, 1);
+        if (varIntLen < 0)
         {
-          con->_dataStream->Peak(2, b);
-          assert(!(b & 0x80));
-          len = (a & 0x7F) << 8 | b;
-          skip = 3;
-        }
-        else
-        {
-          len = a;
-          skip = 2;
-        }
-        if (len > con->_dataStream->Available())
+          // not enough data
           return 0;
+        }
 
-        con->_dataStream->Skip(skip); // skip what we peaked
+        if (len > con->_dataStream->Available())
+        {
+          ECHIDNA_LOG_DEBUG(_logger, "Not enough data[{}] available[{}]", len, con->_dataStream->Available());
+          return 0;
+        }
 
+        con->_dataStream->Skip(1 + varIntLen); // skip what we peaked
+
+        // pull the rest of the mqtt message
         assert(len < 8192);
         char buf[8192];
         con->_dataStream->Pop(buf, len);
@@ -299,6 +294,16 @@ while ((encodedByte AND 128) != 0)
 
           std::string payload(&buf[buf_offset], payload_len);
           ECHIDNA_LOG_DEBUG(_logger, "payload[{}]", payload);
+
+          // TODO
+          if (once)
+          {
+            // TODO: Send PUBACK
+          }
+          if (atLeastOnce)
+          {
+            // TODO: Send PUBREC
+          }
         }
         break;
         case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBACK):
@@ -341,7 +346,9 @@ while ((encodedByte AND 128) != 0)
           ECHIDNA_LOG_DEBUG(_logger, "Unknown MQTT packet type");
           break;
         }
-      }
+
+        ECHIDNA_LOG_DEBUG(_logger, "Remaining datastream[{}]", con->_dataStream->Available());
+      } // end of while
 
       return 0;
     }
@@ -649,6 +656,27 @@ while ((encodedByte AND 128) != 0)
 
         con->_writeBuf->Push(reinterpret_cast<const char *>(&encodedByte), sizeof(uint8_t));
       } while (remainingLength > 0);
+    }
+
+    int decodeVarInt(std::shared_ptr<con_type> &con, uint32_t &remainingLength, uint32_t offset)
+    {
+      remainingLength = 0;
+      uint8_t multiplier = 1;
+      char encodedByte = 0;
+      int count = 0;
+      do
+      {
+        if (con->_dataStream->Available() < offset + count)
+          return -1; // not enough data to continue right now
+
+        con->_dataStream->Peak(offset + count, encodedByte);
+        ++count;
+        remainingLength += (encodedByte & 127) * multiplier;
+        if (multiplier > 128 * 128 * 128)
+          return -1;
+        multiplier *= 128;
+      } while ((encodedByte & 128) != 0);
+      return count;
     }
 
     std::unordered_map<int, std::shared_ptr<con_type>> _connections;
