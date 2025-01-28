@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include <arpa/inet.h>
@@ -104,6 +103,7 @@ namespace eight99bushwick::piapiac
   enum class MqttReasonCode : uint8_t
   {
     MQ_RC_SUCCESS = 0,
+    MQ_RC_DISCONNECT_WITH_WILL_MESSAGE = 0x04,
     MQ_RC_NO_MATCHING_SUBSCRIBERS = 0x10,
     MQ_RC_UNSPECIFIED_ERROR = 0x80,
     MQ_RC_MALFORMED_PACKET = 0x81,
@@ -116,17 +116,30 @@ namespace eight99bushwick::piapiac
     MQ_RC_SERVER_UNAVAILABLE = 0x88,
     MQ_RC_SERVER_BUSY = 0x89,
     MQ_RC_BANNED = 0x8A,
+    MQ_RC_SERVER_SHUTTING_DOWN = 0x8B,
     MQ_RC_BAD_AUTHENTICATION_METHOD = 0x8C,
+    MQ_RC_KEEP_ALIVE_TIMEOUT = 0x8D,
+    MQ_RC_SESSION_TAKEN_OVER = 0x8E,
+    MQ_RC_TOPIC_FILTER_INVALID = 0x8F,
     MQ_RC_TOPIC_NAME_INVALID = 0x90,
     MQ_RC_PACKET_IDENTIFIER_IN_USE = 0x91,
+    MQ_RC_PACKET_IDENTIFIER_NOT_FOUND = 0x92,
+    MQ_RC_RECEIVE_MAXIMUM_EXCEEDED = 0x93,
+    MQ_RC_TOPIC_ALIAS_INVALID = 0x94,
     MQ_RC_PACKET_TOO_LARGE = 0x95,
+    MQ_RC_MESSAGE_RATE_TOO_HIGH = 0x96,
     MQ_RC_QUOTA_EXCEEDED = 0x97,
+    MQ_RC_ADMINISTRATIVE_ACTION = 0x98,
     MQ_RC_PAYLOAD_FORMAT_INVALID = 0x99,
     MQ_RC_RETAIN_NOT_SUPPORTED = 0x9A,
     MQ_RC_QOS_NOT_SUPPORTED = 0x9B,
     MQ_RC_USE_ANOTHER_SERVER = 0x9C,
     MQ_RC_SERVER_MOVED = 0x9D,
-    MQ_RC_CONNECTION_RATE_EXCEEDED = 0x9F
+    MQ_RC_SHARED_SUBSCRIPTION_NOT_SUPPORTED = 0x9E,
+    MQ_RC_CONNECTION_RATE_EXCEEDED = 0x9F,
+    MQ_RC_MAXIMUM_CONNECT_TIME = 0xA0,
+    MQ_RC_SUBSCRIPTION_IDENTIFIERS_NOT_SUPPORTED = 0xA1,
+    MQ_RC_WILDCARD_SUBSCRIPTION_NOT_SUPPORTED = 0xA2
   };
 
   struct __attribute__((packed)) MqttConnect
@@ -218,7 +231,7 @@ namespace eight99bushwick::piapiac
           return 0;
         }
 
-        con->_dataStream->Skip(1 + varIntLen); // skip what we peaked
+        con->_dataStream->Skip(sizeof(MqttFixed) + varIntLen); // skip what we peaked
 
         // pull the rest of the mqtt message
         assert(len < 8192);
@@ -232,16 +245,11 @@ namespace eight99bushwick::piapiac
           ECHIDNA_LOG_DEBUG(_logger, "MQTT CONNECT");
           break;
         case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_CONNACK):
-          ECHIDNA_LOG_DEBUG(_logger, "MQTT CONNACK");
-          log_reason_code(buf[1]);
+          HandleConnAck(fd, con, fixed, buf, len);
           break;
-
         case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBLISH):
-        {
           HandlePublish(fd, con, fixed, buf, len);
           break;
-        }
-        break;
         case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBACK):
           ECHIDNA_LOG_DEBUG(_logger, "MQTT PUBACK");
           break;
@@ -273,7 +281,7 @@ namespace eight99bushwick::piapiac
           ECHIDNA_LOG_DEBUG(_logger, "MQTT PINGRESP");
           break;
         case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_DISCONNECT):
-          ECHIDNA_LOG_DEBUG(_logger, "MQTT DISCONNECT");
+          HandleDisconnect(fd, con, fixed, buf, len);
           break;
         case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_AUTH):
           ECHIDNA_LOG_DEBUG(_logger, "MQTT AUTH");
@@ -513,82 +521,6 @@ namespace eight99bushwick::piapiac
     }
 
   private:
-    void log_reason_code(uint8_t code)
-    {
-      switch (code)
-      {
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_SUCCESS):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_SUCCESS");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_UNSPECIFIED_ERROR):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_UNSPECIFIED_ERROR");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_MALFORMED_PACKET):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_MALFORMED_PACKET");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_PROTOCOL_ERROR):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_PROTOCOL_ERROR");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_IMPLEMENTATION_SPECIFIC_ERROR):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_IMPLEMENTATION_SPECIFIC_ERROR");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_UNSUPPORTED_PROTOCOL_VERSION):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_UNSUPPORTED_PROTOCOL_VERSION");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_CLIENT_IDENTIFIER_NOT_VALID):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_CLIENT_IDENTIFIER_NOT_VALID");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_BAD_USER_NAME_OR_PASSWORD):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_BAD_USER_NAME_OR_PASSWORD");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_NOT_AUTHORIZED):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_NOT_AUTHORIZED");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_SERVER_UNAVAILABLE):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_SERVER_UNAVAILABLE");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_SERVER_BUSY):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_SERVER_BUSY");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_BANNED):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_BANNED");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_BAD_AUTHENTICATION_METHOD):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_BAD_AUTHENTICATION_METHOD");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_TOPIC_NAME_INVALID):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_TOPIC_NAME_INVALID");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_PACKET_TOO_LARGE):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_PACKET_TOO_LARGE");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_QUOTA_EXCEEDED):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_QUOTA_EXCEEDED");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_PAYLOAD_FORMAT_INVALID):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_PAYLOAD_FORMAT_INVALID");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_RETAIN_NOT_SUPPORTED):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_RETAIN_NOT_SUPPORTED");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_QOS_NOT_SUPPORTED):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_QOS_NOT_SUPPORTED");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_USE_ANOTHER_SERVER):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_USE_ANOTHER_SERVER");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_SERVER_MOVED):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_SERVER_MOVED");
-        break;
-      case static_cast<uint8_t>(MqttReasonCode::MQ_RC_CONNECTION_RATE_EXCEEDED):
-        ECHIDNA_LOG_INFO(_logger, "MQ_RC_CONNECTION_RATE_EXCEEDED");
-        break;
-      default:
-        ECHIDNA_LOG_INFO(_logger, "Unknown reason code");
-        break;
-      }
-    }
-
     typedef struct MqttConnection
     {
       std::shared_ptr<coypu::buf::BipBuf<char, uint64_t>> _writeBuf;
@@ -599,7 +531,7 @@ namespace eight99bushwick::piapiac
                      std::function<int(int, const struct iovec *, int)> writev,
                      msg_cb_type msgCB,
                      const std::shared_ptr<StreamTrait> &dataStream,
-                     const std::shared_ptr<PublishTrait> &mqttOutStream) : _fd(fd), _readv(readv), _writev(writev), _msgCB(msgCB), _dataStream(dataStream), _mqttOutStream(mqttOutStream)
+                     const std::shared_ptr<PublishTrait> &mqttOutStream) : _fd(fd), _readv(readv), _writev(writev), _msgCB(msgCB), _dataStream(dataStream), _mqttOutStream(mqttOutStream), _connected(true)
       {
         uint64_t capacity = 8192;
         _writeData = new char[capacity];
@@ -630,6 +562,7 @@ namespace eight99bushwick::piapiac
       std::shared_ptr<PublishTrait> _mqttOutStream;
       char *_writeData;
       char *_variableData;
+      bool _connected;
     } con_type;
 
     void encodeVarInt(std::shared_ptr<con_type> &con, uint8_t remainingLength)
@@ -668,7 +601,32 @@ namespace eight99bushwick::piapiac
       return count;
     }
 
-    void HandlePublish (int fd, std::shared_ptr<con_type> &con, MqttFixed &fixed, char *buf, uint32_t len)
+    void HandleDisconnect(int fd [[maybe_unused]], std::shared_ptr<con_type> &con [[maybe_unused]], MqttFixed &fixed, char *buf, uint32_t len)
+    {
+      assert(len >= 1);
+      assert(fixed.flags == 0);
+      con->_connected = false;
+      uint8_t reasonCode = buf[0];
+
+      ECHIDNA_LOG_DEBUG(_logger, "MQTT DISCONNECT reasonCode[{:x}]", reasonCode);
+    }
+
+    void HandleConnAck(int fd [[maybe_unused]], std::shared_ptr<con_type> &con [[maybe_unused]], MqttFixed &fixed [[maybe_unused]], char *buf, uint32_t len)
+    {
+      assert(len >= 2);
+      // Connect Acknowledge Flags, Connect Reason Code, and Properties
+      uint8_t flags = buf[0];
+      uint8_t reasonCode = buf[1];
+
+      ECHIDNA_LOG_DEBUG(_logger, "MQTT CONNACK flags[{:x}] reasonCode[{:x}]", flags, reasonCode);
+
+      if (reasonCode == static_cast<uint8_t>(MqttReasonCode::MQ_RC_SUCCESS))
+      {
+        con->_connected = true;
+      }
+    }
+
+    void HandlePublish(int fd, std::shared_ptr<con_type> &con, MqttFixed &fixed, char *buf, uint32_t len)
     {
       MqttFlags flags = static_cast<MqttFlags>(fixed.flags);
       bool retain = (flags & MqttFlags::MQ_FLAG_PUBLISH_RETAIN) == MqttFlags::MQ_FLAG_PUBLISH_RETAIN;
@@ -733,6 +691,5 @@ namespace eight99bushwick::piapiac
     write_cb_type _set_write;
     uint16_t _nextPacketIdentifier;
   };
-
 
 } // namespace eight99bushwick
