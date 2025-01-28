@@ -238,62 +238,8 @@ namespace eight99bushwick::piapiac
 
         case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBLISH):
         {
-          MqttFlags flags = static_cast<MqttFlags>(fixed.flags);
-          bool retain = (flags & MqttFlags::MQ_FLAG_PUBLISH_RETAIN) == MqttFlags::MQ_FLAG_PUBLISH_RETAIN;
-          bool dup = (flags & MqttFlags::MQ_FLAG_PUBLISH_DUP) == MqttFlags::MQ_FLAG_PUBLISH_DUP;
-          bool atLeastOnce = (flags & MqttFlags::MQ_FLAG_PUBLISH_QOS2) == MqttFlags::MQ_FLAG_PUBLISH_QOS2;
-          bool once = (flags & MqttFlags::MQ_FLAG_PUBLISH_QOS1) == MqttFlags::MQ_FLAG_PUBLISH_QOS1;
-
-          ECHIDNA_LOG_DEBUG(_logger, "MQTT Header Flags[{}]", static_cast<uint8_t>(fixed.flags));
-          ECHIDNA_LOG_DEBUG(_logger, "MQTT PUBLISH retain[{}] dup[{}] atLeastonce[{}] once[{}] len[{}]",
-                            retain ? "T" : "F",
-                            dup ? "T" : "F",
-                            atLeastOnce ? "T" : "F",
-                            once ? "T" : "F",
-                            len);
-
-          uint32_t buf_offset = 0;
-          uint16_t topic_len = ntohs(*reinterpret_cast<uint16_t *>(buf)); // 2
-          buf_offset += 2;
-          std::string topic(&buf[buf_offset], topic_len);
-          buf_offset += topic_len;
-          ECHIDNA_LOG_DEBUG(_logger, "topic[{}] len[{}]", topic, topic_len);
-
-          // Only present if QoS > 0
-          uint16_t packet_id = 0;
-          if (atLeastOnce || once)
-          {
-            packet_id = ntohs(*reinterpret_cast<uint16_t *>(&buf[buf_offset])); // 2
-            buf_offset += 2;
-            ECHIDNA_LOG_DEBUG(_logger, "packet_id[{}]", packet_id);
-          }
-
-          uint32_t multiplier = 1;
-          uint32_t property_len = 0;
-          do
-          {
-            property_len += (buf[buf_offset] & 127) * multiplier;
-            if (multiplier > 128 * 128 * 128)
-              throw std::runtime_error("Malformed Variable Byte Integer");
-            multiplier *= 128;
-          } while ((buf[buf_offset++] & 128) != 0);
-          ECHIDNA_LOG_DEBUG(_logger, "property_len[{}]", property_len);
-
-          // skip properties
-          uint32_t payload_len = len - buf_offset;
-          ECHIDNA_LOG_DEBUG(_logger, "payload_len[{}]", payload_len);
-          con->_msgCB(topic, &buf[buf_offset], payload_len);
-
-          if (once)
-          {
-            assert(packet_id > 0);
-            PubAck(fd, packet_id, MqttReasonCode::MQ_RC_SUCCESS);
-          }
-          if (atLeastOnce)
-          {
-            assert(packet_id > 0);
-            PubRec(fd, packet_id, MqttReasonCode::MQ_RC_SUCCESS);
-          }
+          HandlePublish(fd, con, fixed, buf, len);
+          break;
         }
         break;
         case static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_PUBACK):
@@ -722,9 +668,71 @@ namespace eight99bushwick::piapiac
       return count;
     }
 
+    void HandlePublish (int fd, std::shared_ptr<con_type> &con, MqttFixed &fixed, char *buf, uint32_t len)
+    {
+      MqttFlags flags = static_cast<MqttFlags>(fixed.flags);
+      bool retain = (flags & MqttFlags::MQ_FLAG_PUBLISH_RETAIN) == MqttFlags::MQ_FLAG_PUBLISH_RETAIN;
+      bool dup = (flags & MqttFlags::MQ_FLAG_PUBLISH_DUP) == MqttFlags::MQ_FLAG_PUBLISH_DUP;
+      bool atLeastOnce = (flags & MqttFlags::MQ_FLAG_PUBLISH_QOS2) == MqttFlags::MQ_FLAG_PUBLISH_QOS2;
+      bool once = (flags & MqttFlags::MQ_FLAG_PUBLISH_QOS1) == MqttFlags::MQ_FLAG_PUBLISH_QOS1;
+
+      ECHIDNA_LOG_DEBUG(_logger, "MQTT Header Flags[{}]", static_cast<uint8_t>(fixed.flags));
+      ECHIDNA_LOG_DEBUG(_logger, "MQTT PUBLISH retain[{}] dup[{}] atLeastonce[{}] once[{}] len[{}]",
+                        retain ? "T" : "F",
+                        dup ? "T" : "F",
+                        atLeastOnce ? "T" : "F",
+                        once ? "T" : "F",
+                        len);
+
+      uint32_t buf_offset = 0;
+      uint16_t topic_len = ntohs(*reinterpret_cast<uint16_t *>(buf)); // 2
+      buf_offset += 2;
+      std::string topic(&buf[buf_offset], topic_len);
+      buf_offset += topic_len;
+      ECHIDNA_LOG_DEBUG(_logger, "topic[{}] len[{}]", topic, topic_len);
+
+      // Only present if QoS > 0
+      uint16_t packet_id = 0;
+      if (atLeastOnce || once)
+      {
+        packet_id = ntohs(*reinterpret_cast<uint16_t *>(&buf[buf_offset])); // 2
+        buf_offset += 2;
+        ECHIDNA_LOG_DEBUG(_logger, "packet_id[{}]", packet_id);
+      }
+
+      uint32_t multiplier = 1;
+      uint32_t property_len = 0;
+      do
+      {
+        property_len += (buf[buf_offset] & 127) * multiplier;
+        if (multiplier > 128 * 128 * 128)
+          throw std::runtime_error("Malformed Variable Byte Integer");
+        multiplier *= 128;
+      } while ((buf[buf_offset++] & 128) != 0);
+      ECHIDNA_LOG_DEBUG(_logger, "property_len[{}]", property_len);
+
+      // skip properties
+      uint32_t payload_len = len - buf_offset;
+      ECHIDNA_LOG_DEBUG(_logger, "payload_len[{}]", payload_len);
+      con->_msgCB(topic, &buf[buf_offset], payload_len);
+
+      if (once)
+      {
+        assert(packet_id > 0);
+        PubAck(fd, packet_id, MqttReasonCode::MQ_RC_SUCCESS);
+      }
+      if (atLeastOnce)
+      {
+        assert(packet_id > 0);
+        PubRec(fd, packet_id, MqttReasonCode::MQ_RC_SUCCESS);
+      }
+    }
+
     std::unordered_map<int, std::shared_ptr<con_type>> _connections;
     LogTrait _logger;
     write_cb_type _set_write;
     uint16_t _nextPacketIdentifier;
   };
+
+
 } // namespace eight99bushwick

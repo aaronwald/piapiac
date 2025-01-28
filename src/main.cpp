@@ -179,7 +179,7 @@ int main(int argc [[maybe_unused]], char **argv)
   context->_eventMgr->Register(timerFD, [&mqttFD, &context](int fd [[maybe_unused]])
                                {
                                 	 uint64_t x;
-                                  ::read(fd, &x, sizeof(uint64_t)); 
+                                  ::read(fd, &x, sizeof(uint64_t));
                                  context->_mqttManager->Ping(mqttFD);
                                  return 0; }, nullptr, nullptr);
 
