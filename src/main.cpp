@@ -168,22 +168,24 @@ int main(int argc [[maybe_unused]], char **argv)
   std::function<int(int)> mqttReadCB = std::bind(&MqttManagerType::Read, context->_mqttManager, std::placeholders::_1);
   std::function<int(int)> mqttWriteCB = std::bind(&MqttManagerType::Write, context->_mqttManager, std::placeholders::_1);
   context->_eventMgr->Register(mqttFD, mqttReadCB, mqttWriteCB, closeCB);
-  // END mqtt
 
-  uint16_t keepAlive = 15; // seconds
-  assert(context->_mqttManager->Connect(mqttFD, keepAlive, "wald123", "wald", "wald"));
+  uint16_t keepAlive = 60; // seconds
+  bool cleanSession = true;
+  assert(context->_mqttManager->Connect(mqttFD, keepAlive, "wald123", "wald", "wald", cleanSession));
   assert(context->_mqttManager->Subscribe(mqttFD, "#"));
 
+  // Create ping timer
   int timerFD = TimerFDHelper::CreateMonotonicNonBlock();
   TimerFDHelper::SetRelativeRepeating(timerFD, keepAlive, 0); // 10 seconds
-  context->_eventMgr->Register(timerFD, [&mqttFD, &context](int fd [[maybe_unused]])
-                               {
-                                	 uint64_t x;
-                                  ::read(fd, &x, sizeof(uint64_t));
-                                 context->_mqttManager->Ping(mqttFD);
-                                 return 0; }, nullptr, nullptr);
-
-  // context->_mqttManager->Ping(mqttFD);
+  auto pingCB = [&mqttFD, &context](int fd [[maybe_unused]])
+  {
+    uint64_t x;
+    assert(::read(fd, &x, sizeof(uint64_t)) == sizeof(uint64_t));
+    context->_mqttManager->Ping(mqttFD);
+    return 0;
+  };
+  context->_eventMgr->Register(timerFD, pingCB, nullptr, nullptr);
+  // END mqtt
 
   // wait til signal
   while (!done)
