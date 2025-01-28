@@ -142,6 +142,48 @@ namespace eight99bushwick::piapiac
     MQ_RC_WILDCARD_SUBSCRIPTION_NOT_SUPPORTED = 0xA2
   };
 
+  const std::string MQTT_PROTOCOL_NAME = "MQTT";
+
+  const std::unordered_map<MqttReasonCode, std::string> MQTT_REASON_CODE_STRINGS = {
+      {MqttReasonCode::MQ_RC_SUCCESS, "Success"},
+      {MqttReasonCode::MQ_RC_DISCONNECT_WITH_WILL_MESSAGE, "Disconnect with Will Message"},
+      {MqttReasonCode::MQ_RC_NO_MATCHING_SUBSCRIBERS, "No Matching Subscribers"},
+      {MqttReasonCode::MQ_RC_UNSPECIFIED_ERROR, "Unspecified Error"},
+      {MqttReasonCode::MQ_RC_MALFORMED_PACKET, "Malformed Packet"},
+      {MqttReasonCode::MQ_RC_PROTOCOL_ERROR, "Protocol Error"},
+      {MqttReasonCode::MQ_RC_IMPLEMENTATION_SPECIFIC_ERROR, "Implementation Specific Error"},
+      {MqttReasonCode::MQ_RC_UNSUPPORTED_PROTOCOL_VERSION, "Unsupported Protocol Version"},
+      {MqttReasonCode::MQ_RC_CLIENT_IDENTIFIER_NOT_VALID, "Client Identifier Not Valid"},
+      {MqttReasonCode::MQ_RC_BAD_USER_NAME_OR_PASSWORD, "Bad User Name or Password"},
+      {MqttReasonCode::MQ_RC_NOT_AUTHORIZED, "Not Authorized"},
+      {MqttReasonCode::MQ_RC_SERVER_UNAVAILABLE, "Server Unavailable"},
+      {MqttReasonCode::MQ_RC_SERVER_BUSY, "Server Busy"},
+      {MqttReasonCode::MQ_RC_BANNED, "Banned"},
+      {MqttReasonCode::MQ_RC_SERVER_SHUTTING_DOWN, "Server Shutting Down"},
+      {MqttReasonCode::MQ_RC_BAD_AUTHENTICATION_METHOD, "Bad Authentication Method"},
+      {MqttReasonCode::MQ_RC_KEEP_ALIVE_TIMEOUT, "Keep Alive Timeout"},
+      {MqttReasonCode::MQ_RC_SESSION_TAKEN_OVER, "Session Taken Over"},
+      {MqttReasonCode::MQ_RC_TOPIC_FILTER_INVALID, "Topic Filter Invalid"},
+      {MqttReasonCode::MQ_RC_TOPIC_NAME_INVALID, "Topic Name Invalid"},
+      {MqttReasonCode::MQ_RC_PACKET_IDENTIFIER_IN_USE, "Packet Identifier In Use"},
+      {MqttReasonCode::MQ_RC_PACKET_IDENTIFIER_NOT_FOUND, "Packet Identifier Not Found"},
+      {MqttReasonCode::MQ_RC_RECEIVE_MAXIMUM_EXCEEDED, "Receive Maximum Exceeded"},
+      {MqttReasonCode::MQ_RC_TOPIC_ALIAS_INVALID, "Topic Alias Invalid"},
+      {MqttReasonCode::MQ_RC_PACKET_TOO_LARGE, "Packet Too Large"},
+      {MqttReasonCode::MQ_RC_MESSAGE_RATE_TOO_HIGH, "Message Rate Too High"},
+      {MqttReasonCode::MQ_RC_QUOTA_EXCEEDED, "Quota Exceeded"},
+      {MqttReasonCode::MQ_RC_ADMINISTRATIVE_ACTION, "Administrative Action"},
+      {MqttReasonCode::MQ_RC_PAYLOAD_FORMAT_INVALID, "Payload Format Invalid"},
+      {MqttReasonCode::MQ_RC_RETAIN_NOT_SUPPORTED, "Retain Not Supported"},
+      {MqttReasonCode::MQ_RC_QOS_NOT_SUPPORTED, "QoS Not Supported"},
+      {MqttReasonCode::MQ_RC_USE_ANOTHER_SERVER, "Use Another Server"},
+      {MqttReasonCode::MQ_RC_SERVER_MOVED, "Server Moved"},
+      {MqttReasonCode::MQ_RC_SHARED_SUBSCRIPTION_NOT_SUPPORTED, "Shared Subscription Not Supported"},
+      {MqttReasonCode::MQ_RC_CONNECTION_RATE_EXCEEDED, "Connection Rate Exceeded"},
+      {MqttReasonCode::MQ_RC_MAXIMUM_CONNECT_TIME, "Maximum Connect Time"},
+      {MqttReasonCode::MQ_RC_SUBSCRIPTION_IDENTIFIERS_NOT_SUPPORTED, "Subscription Identifiers Not Supported"},
+      {MqttReasonCode::MQ_RC_WILDCARD_SUBSCRIPTION_NOT_SUPPORTED, "Wildcard Subscription Not Supported"}};
+
   struct __attribute__((packed)) MqttConnect
   {
     uint8_t protocolName[6];
