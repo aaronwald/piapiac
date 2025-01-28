@@ -495,6 +495,44 @@ namespace eight99bushwick::piapiac
       return false;
     }
 
+    bool Unsubscribe(int fd, std::string topic)
+    {
+      auto x = _connections.find(fd);
+      if (x == _connections.end())
+        return false;
+
+      std::shared_ptr<con_type> &con = (*x).second;
+
+      if (con)
+      {
+        // reserved 0010 required
+        uint8_t fixed = (static_cast<uint8_t>(MqttControlPacketType::MQ_CPT_UNSUBSCRIBE) << 4) | 0x02;
+        con->_writeBuf->Push(reinterpret_cast<const char *>(&fixed), sizeof(fixed));
+
+        // variable header
+        uint16_t packet_id = _nextPacketIdentifier++;
+        assert(con->_variableBuf->IsEmpty());
+        con->_variableBuf->Push(reinterpret_cast<const char *>(&packet_id), sizeof(packet_id));
+        con->_variableBuf->Push("\0", 1); // properties
+
+        uint16_t topic_len = htons(topic.length());
+        con->_variableBuf->Push(reinterpret_cast<const char *>(&topic_len), sizeof(topic_len));
+        con->_variableBuf->Push(topic.c_str(), topic.length());
+
+        // encode variableBuf
+        encodeVarInt(con, con->_variableBuf->Available());
+        con->_variableBuf->PopAll([con](const char *data, uint64_t len) -> bool
+                                  {
+          con->_writeBuf->Push(data, len);
+          return true; }, con->_variableBuf->Available());
+
+        _set_write(fd);
+        return true;
+      }
+
+      return false;
+    }
+
     bool Connect(int fd, uint16_t keepAlive, const std::string &clientId, const std::string &userName, const std::string &password, bool cleanSession = true)
     {
       auto x = _connections.find(fd);
