@@ -151,11 +151,15 @@ int main(int argc [[maybe_unused]], char **argv)
   // start quill after
   quill::Backend::start();
   std::string host("mqtt");
+  bool dump_records = false;
 
-  while ((opt = getopt(argc, argv, "dm:")) != -1)
+  while ((opt = getopt(argc, argv, "dm:b")) != -1)
   { // for each option...
     switch (opt)
     {
+    case 'b':
+      dump_records = true;
+      break;
     case 'm':
       host = optarg;
       break;
@@ -252,7 +256,7 @@ int main(int argc [[maybe_unused]], char **argv)
   // Create ping timer
   int timerFD = TimerFDHelper::CreateMonotonicNonBlock();
   TimerFDHelper::SetRelativeRepeating(timerFD, keepAlive, 0); // 10 seconds
-  auto pingCB = [&mqttFD, &context](int fd [[maybe_unused]])
+  auto pingCB = [&mqttFD, &context](int fd)
   {
     uint64_t x;
     assert(::read(fd, &x, sizeof(uint64_t)) == sizeof(uint64_t));
@@ -272,7 +276,10 @@ int main(int argc [[maybe_unused]], char **argv)
   }
 
   ECHIDNA_LOG_INFO(logger, "piapiac done");
-  dumpRecords(context);
+  if (dump_records)
+  {
+    dumpRecords(context);
+  }
   context->_dm->Destroy();
 
   exit(EXIT_SUCCESS);
