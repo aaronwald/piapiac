@@ -62,10 +62,8 @@ set(piapiac_release_flags  -Wpedantic -Wno-deprecated-declarations -fno-omit-fra
 
 target_compile_options(piapiac PRIVATE "$<IF:$<CONFIG:Debug>,${piapiac_debug_flags},${piapiac_release_flags}>")
 target_compile_options(piapiac PRIVATE -Werror -Wall -Wextra ) # -v for verbose
-target_link_options(piapiac PRIVATE -fsanitize=address -fsanitize=undefined -v) # -v for verbose
+target_link_options(piapiac PRIVATE -fno-omit-frame-pointer  -fsanitize=address -fsanitize=undefined -v) # -v for verbose
 target_link_libraries(piapiac PRIVATE pthread duckdb  OpenSSL::SSL OpenSSL::Crypto numa yaml nghttp2 echidna PUBLIC quill::quill)
-
-
 # END piapiac
 
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)

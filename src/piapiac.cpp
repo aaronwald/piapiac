@@ -1,28 +1,20 @@
 
 #include "piapiac.hpp"
+#include <iostream>
 
 namespace eight99bushwick
 {
   namespace piapiac
   {
-    DockerMgr::DockerMgr() noexcept : _db(NULL), _conn(NULL)
+    DuckDBMgr::DuckDBMgr() noexcept : _db(NULL), _conn(NULL)
     {
     }
 
-    DockerMgr::~DockerMgr() noexcept
+    DuckDBMgr::~DuckDBMgr() noexcept
     {
-      if (_conn)
-      {
-        duckdb_disconnect(&_conn);
-      }
-
-      if (_db)
-      {
-        duckdb_close(&_db);
-      }
     }
 
-    bool DockerMgr::Init() noexcept
+    bool DuckDBMgr::Init() noexcept
     {
       if (duckdb_open(NULL, &_db) == DuckDBError)
       {
@@ -40,12 +32,20 @@ namespace eight99bushwick
       return false;
     }
 
-    bool DockerMgr::Query(const std::string &query) noexcept
+    void DuckDBMgr::Destroy() noexcept
     {
-      return duckdb_query(_conn, query.c_str(), NULL) != DuckDBError;
+      if (_conn)
+      {
+        duckdb_disconnect(&_conn);
+      }
+
+      if (_db)
+      {
+        duckdb_close(&_db);
+      }
     }
 
-    bool DockerMgr::Query(const std::string &query, duckdb_result *result) noexcept
+    bool DuckDBMgr::Query(const std::string &query, duckdb_result *result) noexcept
     {
       return duckdb_query(_conn, query.c_str(), result) != DuckDBError;
     }
