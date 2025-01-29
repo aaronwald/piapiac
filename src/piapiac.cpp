@@ -1,4 +1,3 @@
-
 #include "piapiac.hpp"
 #include <iostream>
 
@@ -6,7 +5,7 @@ namespace eight99bushwick
 {
   namespace piapiac
   {
-    DuckDBMgr::DuckDBMgr() noexcept : _db(NULL), _conn(NULL)
+    DuckDBMgr::DuckDBMgr(const std::string &path) noexcept : _db(NULL), _conn(NULL), _path(path)
     {
     }
 
@@ -16,20 +15,38 @@ namespace eight99bushwick
 
     bool DuckDBMgr::Init() noexcept
     {
-      if (duckdb_open(NULL, &_db) == DuckDBError)
+      duckdb_config config;
+
+      if (_path.empty())
       {
-        goto fail;
+        return false;
+      }
+
+      // create the configuration object
+      if (duckdb_create_config(&config) == DuckDBError)
+      {
+        return false;
+      }
+
+      duckdb_set_config(config, "access_mode", "READ_WRITE"); // or READ_ONLY
+      duckdb_set_config(config, "threads", "2");
+      duckdb_set_config(config, "max_memory", "8GB");
+      duckdb_set_config(config, "default_order", "DESC");
+
+      if (duckdb_open_ext(_path.c_str(), &_db, config, NULL) == DuckDBError)
+      {
+        duckdb_destroy_config(&config);
+        return false;
       }
 
       if (duckdb_connect(_db, &_conn) == DuckDBError)
       {
-        goto fail;
+        duckdb_destroy_config(&config);
+        return false;
       }
 
+      duckdb_destroy_config(&config);
       return true;
-
-    fail:
-      return false;
     }
 
     void DuckDBMgr::Destroy() noexcept

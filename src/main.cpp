@@ -47,12 +47,14 @@ typedef struct PiapiacContextS
     _mqttStreamSP = coypu::store::StoreUtil::CreateAnonStore<AnonStreamType, AnonRWBufType>(); // mqtt msgs will end up here
 
     _mqttManager = std::make_shared<MqttManagerType>(consoleLogger, _set_write_ws);
+
+    _dm = std::make_shared<eight99bushwick::piapiac::DuckDBMgr>("./piapiac.duckdb");
   }
   PiapiacContextS(const PiapiacContextS &other) = delete;
   PiapiacContextS &operator=(const PiapiacContextS &other) = delete;
 
   LogType _consoleLogger;
-  eight99bushwick::piapiac::DuckDBMgr _dm;
+  std::shared_ptr<eight99bushwick::piapiac::DuckDBMgr> _dm;
 
   std::shared_ptr<MqttManagerType> _mqttManager;
   std::shared_ptr<EventManagerType> _eventMgr;
@@ -65,7 +67,7 @@ void setupDuckDB(std::shared_ptr<PiapiacContext> &context)
 
   // microsecond ts
   duckdb_result res;
-  if (!context->_dm.Query("CREATE TABLE IF NOT EXISTS pia_msgs (ts TIMESTAMP, topic VARCHAR, msg VARCHAR);", &res))
+  if (!context->_dm->Query("CREATE TABLE IF NOT EXISTS pia_msgs (ts TIMESTAMP, packet_id INT, topic VARCHAR, msg VARCHAR);", &res))
   {
     const char *error = duckdb_result_error(&res);
     ECHIDNA_LOG_ERROR(context->_consoleLogger, "Failed to create table [{}]", error);
@@ -75,10 +77,12 @@ void setupDuckDB(std::shared_ptr<PiapiacContext> &context)
   duckdb_destroy_result(&res); // mem leak will be detected by sanitizer if we dont do this
 }
 
-void storeMqttMessage(std::shared_ptr<PiapiacContext> &context, const std::string &topic, const char *buf, uint32_t len)
+void storeMqttMessage(std::shared_ptr<PiapiacContext> &context, uint16_t packet_id, const std::string &topic, const char *buf, uint32_t len)
 {
   duckdb_result res;
-  if (!context->_dm.Query("INSERT INTO pia_msgs VALUES (CURRENT_TIMESTAMP, '" + topic + "', '" + std::string(buf, len) + "');", &res))
+  std::stringstream ss;
+  ss << "INSERT INTO pia_msgs VALUES (CURRENT_TIMESTAMP, " << packet_id << ", '" << topic << "', '" << std::string(buf, len) << "');";
+  if (!context->_dm->Query(ss.str().c_str(), &res))
   {
     const char *error = duckdb_result_error(&res);
     ECHIDNA_LOG_ERROR(context->_consoleLogger, "Failed to insert msg [{}]", error);
@@ -92,7 +96,7 @@ void dumpRecords(std::shared_ptr<PiapiacContext> &context)
 {
   duckdb_result result;
 
-  if (!context->_dm.Query("SELECT * FROM pia_msgs", &result))
+  if (!context->_dm->Query("SELECT * FROM pia_msgs", &result))
   {
     ECHIDNA_LOG_ERROR(context->_consoleLogger, "Failed to query [{}]", duckdb_result_error(&result));
     duckdb_destroy_result(&result);
@@ -164,7 +168,7 @@ int main(int argc [[maybe_unused]], char **argv)
   auto context = std::make_shared<PiapiacContext>(logger);
   std::weak_ptr<PiapiacContext> w_context = context;
   context->_eventMgr->Init();
-  context->_dm.Init();
+  context->_dm->Init();
   setupDuckDB(context);
 
   // BEGIN Signal - handle signals with fd
@@ -224,13 +228,13 @@ int main(int argc [[maybe_unused]], char **argv)
   std::function<int(int, const struct iovec *, int)> writeMQTTCB =
       std::bind(::writev, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 
-  auto mqttCB = [w_context](const std::string &topic, const char *buf, uint32_t len)
+  auto mqttCB = [w_context](uint16_t packet_id, const std::string &topic, const char *buf, uint32_t len)
   {
     std::shared_ptr<PiapiacContext> context = w_context.lock();
     if (context)
     {
       ECHIDNA_LOG_INFO(context->_consoleLogger, "received msg: {} -->[{}]", topic, std::string(buf, len));
-      storeMqttMessage(context, topic, buf, len);
+      storeMqttMessage(context, packet_id, topic, buf, len);
     }
   };
 
@@ -269,7 +273,7 @@ int main(int argc [[maybe_unused]], char **argv)
 
   ECHIDNA_LOG_INFO(logger, "piapiac done");
   dumpRecords(context);
-  context->_dm.Destroy();
+  context->_dm->Destroy();
 
   exit(EXIT_SUCCESS);
 }

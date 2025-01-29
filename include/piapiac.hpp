@@ -9,12 +9,8 @@ namespace eight99bushwick
   {
     class DuckDBMgr
     {
-    private:
-      duckdb_database _db;
-      duckdb_connection _conn;
-
     public:
-      DuckDBMgr() noexcept;
+      DuckDBMgr(const std::string &path) noexcept;
       virtual ~DuckDBMgr() noexcept;
       DuckDBMgr(const DuckDBMgr &) = delete;
       DuckDBMgr &operator=(const DuckDBMgr &) = delete;
@@ -25,6 +21,11 @@ namespace eight99bushwick
       void Destroy() noexcept;
       bool Query(const std::string &query) noexcept;
       bool Query(const std::string &query, duckdb_result *result) noexcept;
+
+    private:
+      duckdb_database _db;
+      duckdb_connection _conn;
+      std::string _path;
     };
   } // namespace piapiac
 }
