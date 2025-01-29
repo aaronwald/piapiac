@@ -199,7 +199,7 @@ namespace eight99bushwick::piapiac
   {
   public:
     typedef std::function<int(int)> write_cb_type;
-    typedef std::function<void(const std::string &, const char *, uint32_t)> msg_cb_type;
+    typedef std::function<void(uint16_t, const std::string &, const char *, uint32_t)> msg_cb_type;
 
     MqttManager(LogTrait logger, write_cb_type set_write) : _logger(logger), _set_write(set_write), _nextPacketIdentifier(1)
     {
@@ -752,7 +752,7 @@ namespace eight99bushwick::piapiac
       // skip properties
       uint32_t payload_len = len - buf_offset;
       ECHIDNA_LOG_DEBUG(_logger, "payload_len[{}]", payload_len);
-      con->_msgCB(topic, &buf[buf_offset], payload_len);
+      con->_msgCB(packet_id, topic, &buf[buf_offset], payload_len);
 
       if (once)
       {

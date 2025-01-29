@@ -1,15 +1,55 @@
-
 #include "piapiac.hpp"
+#include <iostream>
 
 namespace eight99bushwick
 {
   namespace piapiac
   {
-    DockerMgr::DockerMgr() noexcept : _db(NULL), _conn(NULL)
+    DuckDBMgr::DuckDBMgr(const std::string &path) noexcept : _db(NULL), _conn(NULL), _path(path)
     {
     }
 
-    DockerMgr::~DockerMgr() noexcept
+    DuckDBMgr::~DuckDBMgr() noexcept
+    {
+    }
+
+    bool DuckDBMgr::Init() noexcept
+    {
+      duckdb_config config;
+
+      if (_path.empty())
+      {
+        return false;
+      }
+
+      // create the configuration object
+      if (duckdb_create_config(&config) == DuckDBError)
+      {
+        return false;
+      }
+
+      duckdb_set_config(config, "access_mode", "READ_WRITE"); // or READ_ONLY
+      duckdb_set_config(config, "threads", "2");
+      duckdb_set_config(config, "max_memory", "8GB");
+      duckdb_set_config(config, "default_order", "DESC");
+
+      if (duckdb_open_ext(_path.c_str(), &_db, config, NULL) == DuckDBError)
+      {
+        duckdb_destroy_config(&config);
+        return false;
+      }
+
+      if (duckdb_connect(_db, &_conn) == DuckDBError)
+      {
+        duckdb_destroy_config(&config);
+        return false;
+      }
+
+      duckdb_destroy_config(&config);
+      return true;
+    }
+
+    void DuckDBMgr::Destroy() noexcept
     {
       if (_conn)
       {
@@ -22,87 +62,10 @@ namespace eight99bushwick
       }
     }
 
-    bool DockerMgr::Init() noexcept
-    {
-      if (duckdb_open(NULL, &_db) == DuckDBError)
-      {
-        goto fail;
-      }
-
-      if (duckdb_connect(_db, &_conn) == DuckDBError)
-      {
-        goto fail;
-      }
-
-      return true;
-
-    fail:
-      return false;
-    }
-
-    bool DockerMgr::Query(const std::string &query) noexcept
-    {
-      return duckdb_query(_conn, query.c_str(), NULL) != DuckDBError;
-    }
-
-    bool DockerMgr::Query(const std::string &query, duckdb_result *result) noexcept
+    bool DuckDBMgr::Query(const std::string &query, duckdb_result *result) noexcept
     {
       return duckdb_query(_conn, query.c_str(), result) != DuckDBError;
     }
 
   } // namespace piapiac
 } // namespace eight99bushwick
-
-/*
-int db()
-{
-  DockerMgr dm;
-  duckdb_result result;
-  idx_t row_count = 0;
-  idx_t column_count = 0;
-
-  if (!dm.Init())
-  {
-    exit(EXIT_FAILURE);
-  }
-
-  if (!dm.Query("CREATE TABLE integers(i INTEGER, j INTEGER);"))
-  {
-    goto cleanup;
-  }
-
-  if (!dm.Query("INSERT INTO integers VALUES (3, 4), (5, 6), (7, NULL);"))
-  {
-    goto cleanup;
-  }
-
-  if (!dm.Query("SELECT * FROM integers;", &result))
-  {
-    goto cleanup;
-  }
-
-  // print the names of the result
-  row_count = duckdb_row_count(&result);
-  column_count = duckdb_column_count(&result);
-  for (size_t i = 0; i < column_count; i++)
-  {
-    printf("%s ", duckdb_column_name(&result, i));
-  }
-  printf("\n");
-  // print the data of the result
-  for (size_t row_idx = 0; row_idx < row_count; row_idx++)
-  {
-    for (size_t col_idx = 0; col_idx < column_count; col_idx++)
-    {
-      char *val = duckdb_value_varchar(&result, col_idx, row_idx);
-      printf("%s ", val);
-      duckdb_free(val);
-    }
-    printf("\n");
-  }
-  // duckdb_print_result(result);
-  exit(EXIT_SUCCESS);
-cleanup:
-  duckdb_destroy_result(&result);
-  exit(EXIT_FAILURE);
-}*/
