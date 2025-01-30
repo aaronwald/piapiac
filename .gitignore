@@ -34,3 +34,5 @@
 build
 duckdb
 **.duckdb*
+vcpkg_installed/
+data

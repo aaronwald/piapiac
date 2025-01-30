@@ -8,6 +8,7 @@ find_package(OpenSSL REQUIRED)
 find_package(yaml CONFIG REQUIRED)
 find_package(libuv CONFIG REQUIRED)
 find_package(quill REQUIRED)
+find_package(protobuf CONFIG REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(NGHTTP2 REQUIRED IMPORTED_TARGET libnghttp2)
@@ -40,7 +41,7 @@ endif()
 FetchContent_Declare(
   libechidna
   GIT_REPOSITORY https://github.com/aaronwald/libechidna.git
-  GIT_TAG       feature/log
+  GIT_TAG        feature/grpc
   GIT_SHALLOW    ON
   )
 FetchContent_MakeAvailable(libechidna)
@@ -50,12 +51,16 @@ FetchContent_MakeAvailable(libechidna)
 # set(CMAKE_INSTALL_RPATH "/usr/local/lib")
 set(CMAKE_BUILD_RPATH "/usr/local/lib")
 
+add_subdirectory(src/proto)
+
 file(GLOB_RECURSE PIAPIAC_SRC ${PROJECT_SOURCE_DIR}/src/*.cpp)
 # BEGIN piapiac
 add_executable(piapiac ${PIAPIAC_SRC})
 target_include_directories(piapiac PRIVATE ${PROJECT_SOURCE_DIR}/include)
 target_include_directories(piapiac PRIVATE ${libechidna_SOURCE_DIR}/include)
 target_include_directories(piapiac PRIVATE ${rapidjson_SOURCE_DIR}/include)
+# INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR}/src)
+target_include_directories(piapiac PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/src)
 
 set(piapiac_debug_flags -Wpedantic -Wno-deprecated-declarations -fno-omit-frame-pointer -g -O0 -DSPDLOG_DEBUG_ON=1 -DSPDLOG_TRACE_ON=1 )
 set(piapiac_release_flags  -Wpedantic -Wno-deprecated-declarations -fno-omit-frame-pointer -g -O3 -DSPDLOG_DEBUG_ON=0 -DSPDLOG_TRACE_ON=0 )
@@ -63,7 +68,7 @@ set(piapiac_release_flags  -Wpedantic -Wno-deprecated-declarations -fno-omit-fra
 target_compile_options(piapiac PRIVATE "$<IF:$<CONFIG:Debug>,${piapiac_debug_flags},${piapiac_release_flags}>")
 target_compile_options(piapiac PRIVATE -Werror -Wall -Wextra ) # -v for verbose
 target_link_options(piapiac PRIVATE -fno-omit-frame-pointer  -fsanitize=address -fsanitize=undefined -v) # -v for verbose
-target_link_libraries(piapiac PRIVATE pthread duckdb  OpenSSL::SSL OpenSSL::Crypto numa yaml nghttp2 echidna PUBLIC quill::quill)
+target_link_libraries(piapiac PRIVATE pthread duckdb  OpenSSL::SSL OpenSSL::Crypto numa yaml nghttp2 echidna PUBLIC quill::quill piapiacproto protobuf::libprotobuf)
 # END piapiac
 
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)

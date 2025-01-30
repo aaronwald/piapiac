@@ -1,34 +1,32 @@
-// For format details, see https://aka.ms/devcontainer.json. For config options, see the
-// README at: https://github.com/devcontainers/templates/tree/main/src/cpp
 {
-	"name": "C++",
-	"build": {
-		"dockerfile": "Dockerfile"
-	},
-	"features": {
-		"ghcr.io/msclock/features/vcpkg:2.0.0": {}
-	},
-	"customizations": {
-		"vscode": {
-			"settings": {
-				"terminal.integrated.shell.linux": "/bin/bash",
-				"cmake.cmakePath": "/usr/local/bin/cmake",
-				"cmake.generator": "Ninja",
-				"editor.renderWhitespace": "all",
-				"editor.renderControlCharacters": true,
-				"editor.renderIndentGuides": true,
-				"files.eol": "\n",
-				"cmake.configureSettings": {
-					"CMAKE_TOOLCHAIN_FILE": "/usr/local/vcpkg/scripts/buildsystems/vcpkg.cmake"
-				}
-			},
-			"extensions": [
-				"ms-vscode.cpptools",
-				"ms-vscode.cmake-tools",
-				"ms-vscode.cpptools-extension-pack",
-				"ms-azuretools.vscode-docker",
-				"bierner.markdown-mermaid"
-			]
-		}
-	}
+  "name": "C++",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/msclock/features/vcpkg:2.0.0": {}
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.shell.linux": "/bin/bash",
+        "cmake.cmakePath": "/usr/local/bin/cmake",
+        "cmake.generator": "Ninja",
+        "editor.renderWhitespace": "all",
+        "editor.renderControlCharacters": true,
+        "editor.renderIndentGuides": true,
+        "files.eol": "\n",
+        "cmake.configureSettings": {
+          "CMAKE_TOOLCHAIN_FILE": "/usr/local/vcpkg/scripts/buildsystems/vcpkg.cmake"
+        }
+      },
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "ms-vscode.cpptools-extension-pack",
+        "ms-azuretools.vscode-docker",
+        "bierner.markdown-mermaid"
+      ]
+    }
+  }
 }

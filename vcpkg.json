@@ -1,10 +1,11 @@
 {
-    "dependencies": [
-      "libwebsockets",
-      "openssl",
-      "libyaml",
-      "libuv",
-      "nghttp2",
-      "quill"
-    ]
-  }
+  "dependencies": [
+    "libwebsockets",
+    "openssl",
+    "libyaml",
+    "libuv",
+    "nghttp2",
+    "quill",
+    "protobuf"
+  ]
+}

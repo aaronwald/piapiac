@@ -12,16 +12,19 @@
 #include "echidna/store.hpp"
 #include "echidna/file.hpp"
 #include "echidna/storeutil.hpp"
+#include "echidna/http2.hpp"
 
 #include "quill/Backend.h"
 #include "quill/Frontend.h"
 #include "quill/Logger.h"
 #include "quill/sinks/ConsoleSink.h"
+#include "proto/piapiac.pb.h"
 
 using namespace coypu::event;
 using namespace coypu::tcp;
 using namespace coypu::store;
 using namespace coypu::file;
+using namespace piapiac::msg;
 
 // BEGIN Types
 typedef std::function<void(void)> CBType;
@@ -31,24 +34,24 @@ typedef coypu::event::EventManager<LogType> EventManagerType;
 typedef coypu::store::LogRWStream<MMapAnon, coypu::store::OneShotCache, 128> AnonRWBufType;
 typedef coypu::store::PositionedStream<AnonRWBufType> AnonStreamType;
 typedef coypu::store::MultiPositionedStreamLog<RWBufType> PublishStreamType;
+typedef coypu::http2::HTTP2GRPCManager<LogType, AnonStreamType, PublishStreamType, piapiac::msg::PiaRequest, piapiac::msg::PiaMessage> HTTP2GRPCManagerType;
+typedef std::unordered_map<int, std::shared_ptr<AnonStreamType>> TxtBufMapType;
 
 typedef eight99bushwick::piapiac::MqttManager<LogType, AnonStreamType, PublishStreamType> MqttManagerType;
 // END Types
 
-// TODO: Parse properties cleanly
-// TODO: Parse publish msgs
-
+// TODO: Parse mqtt properties (ignored for now)
 typedef struct PiapiacContextS
 {
-  PiapiacContextS(LogType &consoleLogger) : _consoleLogger(consoleLogger)
+  PiapiacContextS(LogType &consoleLogger, const std::string &grpcPath) : _consoleLogger(consoleLogger)
   {
     _eventMgr = std::make_shared<EventManagerType>(consoleLogger);
     _set_write_ws = std::bind(&EventManagerType::SetWrite, _eventMgr, std::placeholders::_1);
     _mqttStreamSP = coypu::store::StoreUtil::CreateAnonStore<AnonStreamType, AnonRWBufType>(); // mqtt msgs will end up here
-
     _mqttManager = std::make_shared<MqttManagerType>(consoleLogger, _set_write_ws);
-
     _dm = std::make_shared<eight99bushwick::piapiac::DuckDBMgr>("./piapiac.duckdb");
+    _grpcManager = std::make_shared<HTTP2GRPCManagerType>(_consoleLogger, _set_write_ws, grpcPath);
+    _txtBufs = std::make_shared<TxtBufMapType>();
   }
   PiapiacContextS(const PiapiacContextS &other) = delete;
   PiapiacContextS &operator=(const PiapiacContextS &other) = delete;
@@ -60,6 +63,11 @@ typedef struct PiapiacContextS
   std::shared_ptr<EventManagerType> _eventMgr;
   std::function<int(int)> _set_write_ws;
   std::shared_ptr<AnonStreamType> _mqttStreamSP;
+  std::shared_ptr<HTTP2GRPCManagerType> _grpcManager;
+  std::shared_ptr<TxtBufMapType> _txtBufs;
+
+  // Stores
+  std::shared_ptr<PublishStreamType> _publishStreamSP;
 } PiapiacContext;
 
 void setupDuckDB(std::shared_ptr<PiapiacContext> &context)
@@ -127,6 +135,113 @@ void dumpRecords(std::shared_ptr<PiapiacContext> &context)
   duckdb_destroy_result(&result);
 }
 
+void AcceptHTTP2Client(std::shared_ptr<PiapiacContext> &context, int fd)
+{
+  std::weak_ptr<PiapiacContext> wContextSP = context;
+  struct sockaddr_in client_addr;
+  ::memset(&client_addr, 0, sizeof(client_addr));
+  socklen_t addrlen = sizeof(sockaddr_in);
+
+  // using IP V4
+  int clientfd = TCPHelper::AcceptNonBlock(fd, reinterpret_cast<struct sockaddr *>(&client_addr), &addrlen);
+  if (TCPHelper::SetNoDelay(clientfd))
+  {
+  }
+
+  ECHIDNA_LOG_INFO(context->_consoleLogger, "accept http2 {0}", clientfd);
+
+  if (context)
+  {
+    std::shared_ptr<AnonStreamType> txtBuf = coypu::store::StoreUtil::CreateAnonStore<AnonStreamType, AnonRWBufType>();
+    context->_txtBufs->insert(std::make_pair(clientfd, txtBuf));
+
+    uint64_t init_offset = UINT64_MAX;
+    context->_publishStreamSP->Register(clientfd, init_offset);
+
+    std::function<int(int)> readCB = std::bind(&HTTP2GRPCManagerType::Read, context->_grpcManager, std::placeholders::_1);
+    std::function<int(int)> writeCB = std::bind(&HTTP2GRPCManagerType::Write, context->_grpcManager, std::placeholders::_1);
+    std::function<int(int)> closeCB = [wContextSP](int fd)
+    {
+      auto context = wContextSP.lock();
+      if (context)
+      {
+        context->_publishStreamSP->Unregister(fd);
+        context->_grpcManager->Unregister(fd);
+
+        auto b = context->_txtBufs->find(fd);
+        if (b != context->_txtBufs->end())
+        {
+          context->_txtBufs->erase(b);
+        }
+      }
+      return 0;
+    };
+
+    std::function<int(int, const struct iovec *, int)> readvCB = [](int fd, const struct iovec *iovec, int c) -> int
+    { return ::readv(fd, iovec, c); };
+    std::function<int(int, const struct iovec *, int)> writevCB = [](int fd, const struct iovec *iovec, int c) -> int
+    { return ::writev(fd, iovec, c); };
+    bool b = context->_grpcManager->RegisterConnection(clientfd, true, readvCB, writevCB, nullptr, txtBuf, context->_publishStreamSP);
+    assert(b);
+    int r = context->_eventMgr->Register(clientfd, readCB, writeCB, closeCB);
+    assert(r == 0);
+  }
+}
+void perror(LogType logger, int errnum, const char *msg)
+{
+  char buf[1024] = {};
+  ECHIDNA_LOG_ERROR(logger, "[{0}] ({1}): {2}", errnum, strerror_r(errnum, buf, 1024), msg);
+}
+
+int BindAndListen(LogType logger, const std::string &interface, uint16_t port)
+{
+  int sockFD = TCPHelper::CreateIPV4NonBlockSocket();
+  if (sockFD < 0)
+  {
+    ECHIDNA_LOG_ERROR(logger, "CreateIPV4NonBlockSocket {}", errno);
+    perror(logger, errno, "CreateIPV4NonBlockSocket");
+    return -1;
+  }
+
+  if (TCPHelper::SetReuseAddr(sockFD) < 0)
+  {
+    perror(logger, errno, "SetReuseAddr");
+
+    return -1;
+  }
+  struct sockaddr_in interface_in;
+  int ret = TCPHelper::GetInterfaceIPV4FromName(interface.c_str(), interface.length(), interface_in);
+  if (ret)
+  {
+    perror(logger, errno, "GetInterfaceIPV4FromName");
+
+    return -1;
+  }
+
+  struct sockaddr_in serv_addr = {}; // v4 family
+  ::memset(&serv_addr, 0, sizeof(serv_addr));
+
+  serv_addr.sin_family = AF_INET;
+  serv_addr.sin_addr.s_addr = INADDR_ANY; // interface_in.sin_addr.s_addr;
+  serv_addr.sin_port = htons(port);
+
+  ret = TCPHelper::BindIPV4(sockFD, &serv_addr);
+  if (ret != 0)
+  {
+    ::close(sockFD);
+    perror(logger, errno, "BindIPV4");
+    return -1;
+  }
+
+  ret = TCPHelper::Listen(sockFD, 16);
+  if (ret != 0)
+  {
+    perror(logger, errno, "Listen");
+    return -1;
+  }
+  return sockFD;
+}
+
 int main(int argc [[maybe_unused]], char **argv)
 {
   if (!argv)
@@ -169,7 +284,11 @@ int main(int argc [[maybe_unused]], char **argv)
     }
   }
 
-  auto context = std::make_shared<PiapiacContext>(logger);
+  std::string grpcPath = "/piapiac.msg.PiapiacService/Snap";
+  auto context = std::make_shared<PiapiacContext>(logger, grpcPath);
+  context->_publishStreamSP = coypu::store::StoreUtil::CreateRollingStore<PublishStreamType, RWBufType>("./data/db");
+  assert(context->_publishStreamSP);
+
   std::weak_ptr<PiapiacContext> w_context = context;
   context->_eventMgr->Init();
   context->_dm->Init();
@@ -210,6 +329,32 @@ int main(int argc [[maybe_unused]], char **argv)
     LOG_ERROR(logger, "Register {}, errno");
   }
   // END signal
+
+  // BEGIN Create HTTP2 service
+  int sockFD = BindAndListen(logger, "localhost", 8080);
+  if (sockFD > 0)
+  {
+
+    coypu::event::callback_type acceptCB = [w_context](int fd)
+    {
+      auto context = w_context.lock();
+      if (context)
+      {
+        AcceptHTTP2Client(context, fd);
+      }
+      return 0;
+    };
+
+    if (context->_eventMgr->Register(sockFD, acceptCB, nullptr, nullptr))
+    {
+      ECHIDNA_LOG_ERROR(logger, "Register {}", errno);
+    }
+  }
+  else
+  {
+    ECHIDNA_LOG_ERROR(logger, "Failed to create http2 fd");
+  }
+  // END HTTP2 service
 
   // BEGIN mqtt
   int mqttFD = TCPHelper::ConnectStream(host.c_str(), 1883);
