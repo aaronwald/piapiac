@@ -213,6 +213,7 @@ int BindAndListen(LogType logger, const std::string &interface, uint16_t port)
   int ret = TCPHelper::GetInterfaceIPV4FromName(interface.c_str(), interface.length(), interface_in);
   if (ret)
   {
+    ECHIDNA_LOG_ERROR(logger, "GetInterfaceIPV4FromName interface[{}]", interface);
     perror(logger, errno, "GetInterfaceIPV4FromName");
 
     return -1;
@@ -331,10 +332,9 @@ int main(int argc [[maybe_unused]], char **argv)
   // END signal
 
   // BEGIN Create HTTP2 service
-  int sockFD = BindAndListen(logger, "localhost", 8080);
+  int sockFD = BindAndListen(logger, "lo", 8080);
   if (sockFD > 0)
   {
-
     coypu::event::callback_type acceptCB = [w_context](int fd)
     {
       auto context = w_context.lock();
@@ -355,6 +355,25 @@ int main(int argc [[maybe_unused]], char **argv)
     ECHIDNA_LOG_ERROR(logger, "Failed to create http2 fd");
   }
   // END HTTP2 service
+
+  // BEGIN grpc
+  std::function<piapiac::msg::PiaMessage(piapiac::msg::PiaRequest &)> cb = [](piapiac::msg::PiaRequest &request [[maybe_unused]])
+  {
+    piapiac::msg::PiaMessage cMsg;
+    // auto contextSP = wContext.lock();
+    // if (contextSP)
+    // {
+    //   auto consoleLogger = spdlog::get("console");
+    //   assert(consoleLogger);
+    //   consoleLogger->debug(request.DebugString());
+    //   cMsg = processRequest(request, contextSP);
+    //   return cMsg;
+    // }
+    // assert(false);
+    return cMsg;
+  };
+  context->_grpcManager->SetRequestCB(cb);
+  // END grpc
 
   // BEGIN mqtt
   int mqttFD = TCPHelper::ConnectStream(host.c_str(), 1883);
