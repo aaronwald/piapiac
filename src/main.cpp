@@ -357,19 +357,11 @@ int main(int argc [[maybe_unused]], char **argv)
   // END HTTP2 service
 
   // BEGIN grpc
-  std::function<piapiac::msg::PiaMessage(piapiac::msg::PiaRequest &)> cb = [](piapiac::msg::PiaRequest &request [[maybe_unused]])
+  std::function<piapiac::msg::PiaMessage(piapiac::msg::PiaRequest &)> cb = [logger](piapiac::msg::PiaRequest &request [[maybe_unused]])
   {
     piapiac::msg::PiaMessage cMsg;
-    // auto contextSP = wContext.lock();
-    // if (contextSP)
-    // {
-    //   auto consoleLogger = spdlog::get("console");
-    //   assert(consoleLogger);
-    //   consoleLogger->debug(request.DebugString());
-    //   cMsg = processRequest(request, contextSP);
-    //   return cMsg;
-    // }
-    // assert(false);
+    ECHIDNA_LOG_INFO(logger, "grpc request[{}]", request.DebugString());
+    cMsg.set_title("foo");
     return cMsg;
   };
   context->_grpcManager->SetRequestCB(cb);
