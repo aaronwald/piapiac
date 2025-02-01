@@ -41,7 +41,6 @@ endif()
 FetchContent_Declare(
   libechidna
   GIT_REPOSITORY https://github.com/aaronwald/libechidna.git
-  GIT_TAG        feature/grpc
   GIT_SHALLOW    ON
   )
 FetchContent_MakeAvailable(libechidna)
