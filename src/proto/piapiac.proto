@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package piapiac.msg;
+
+message PiaRequest {
+  enum Type {
+      HEARTBEAT = 0;
+  }
+  Type type = 1;
+}
+
+message PiaMessage {
+  string title = 1;
+}
+
+service PiapiacService {
+  rpc Snap (PiaRequest) returns (PiaMessage);
+}
