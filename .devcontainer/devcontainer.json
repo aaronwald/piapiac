@@ -3,6 +3,9 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
+  "runArgs": [
+    "--network=host"
+  ],
   "features": {
     "ghcr.io/msclock/features/vcpkg:2.0.0": {}
   },
