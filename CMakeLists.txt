@@ -8,7 +8,7 @@ find_package(OpenSSL REQUIRED)
 find_package(yaml CONFIG REQUIRED)
 find_package(libuv CONFIG REQUIRED)
 find_package(quill REQUIRED)
-find_package(protobuf CONFIG REQUIRED)
+find_package(Protobuf CONFIG REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(NGHTTP2 REQUIRED IMPORTED_TARGET libnghttp2)
@@ -42,6 +42,7 @@ FetchContent_Declare(
   libechidna
   GIT_REPOSITORY https://github.com/aaronwald/libechidna.git
   GIT_SHALLOW    ON
+  GIT_TAG        main
   )
 FetchContent_MakeAvailable(libechidna)
 # END echidna
