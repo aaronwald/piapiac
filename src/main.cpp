@@ -357,9 +357,11 @@ int main(int argc [[maybe_unused]], char **argv)
   // END HTTP2 service
 
   // BEGIN grpc
-  std::function<piapiac::msg::PiaMessage(piapiac::msg::PiaRequest &)> cb = [logger](piapiac::msg::PiaRequest &request [[maybe_unused]])
+  uint32_t msg_count = 0;
+  std::function<piapiac::msg::PiaMessage(piapiac::msg::PiaRequest &)> cb = [logger, &msg_count](piapiac::msg::PiaRequest &request [[maybe_unused]])
   {
     piapiac::msg::PiaMessage cMsg;
+    cMsg.set_count(msg_count);
     ECHIDNA_LOG_INFO(logger, "grpc request[{}]", request.DebugString());
     cMsg.set_title("foo");
     return cMsg;
@@ -388,12 +390,13 @@ int main(int argc [[maybe_unused]], char **argv)
   std::function<int(int, const struct iovec *, int)> writeMQTTCB =
       std::bind(::writev, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 
-  auto mqttCB = [w_context](uint16_t packet_id, const std::string &topic, const char *buf, uint32_t len)
+  auto mqttCB = [w_context, &msg_count](uint16_t packet_id, const std::string &topic, const char *buf, uint32_t len)
   {
     std::shared_ptr<PiapiacContext> context = w_context.lock();
     if (context)
     {
       ECHIDNA_LOG_INFO(context->_consoleLogger, "received msg: {} -->[{}]", topic, std::string(buf, len));
+      ++msg_count;
       storeMqttMessage(context, packet_id, topic, buf, len);
     }
   };

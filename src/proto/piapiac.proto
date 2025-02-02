@@ -5,6 +5,8 @@ package piapiac.msg;
 message PiaRequest {
   enum Type {
       HEARTBEAT = 0;
+      SOUND_OFF = 1;
+      SOUND_ON = 2;
   }
   Type type = 1;
   string candy = 2;
@@ -12,6 +14,7 @@ message PiaRequest {
 
 message PiaMessage {
   string title = 1;
+  uint32 count = 2;
 }
 
 service PiapiacService {
