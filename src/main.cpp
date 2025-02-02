@@ -148,7 +148,7 @@ void AcceptHTTP2Client(std::shared_ptr<PiapiacContext> &context, int fd)
   {
   }
 
-  ECHIDNA_LOG_INFO(context->_consoleLogger, "accept http2 {0}", clientfd);
+  ECHIDNA_LOG_INFO(context->_consoleLogger, "Accept http2 FD[{}]", clientfd);
 
   if (context)
   {

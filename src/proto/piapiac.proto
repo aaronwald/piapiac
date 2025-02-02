@@ -7,6 +7,7 @@ message PiaRequest {
       HEARTBEAT = 0;
   }
   Type type = 1;
+  string candy = 2;
 }
 
 message PiaMessage {
