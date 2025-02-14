@@ -135,9 +135,10 @@ void dumpRecords(std::shared_ptr<PiapiacContext> &context)
   duckdb_destroy_result(&result);
 }
 
-void AcceptHTTP2Client(std::shared_ptr<PiapiacContext> &context, int fd)
+template <typename ContextType>
+void AcceptHTTP2Client(std::shared_ptr<ContextType> &context, int fd)
 {
-  std::weak_ptr<PiapiacContext> wContextSP = context;
+  std::weak_ptr<ContextType> wContextSP = context;
   struct sockaddr_in client_addr;
   ::memset(&client_addr, 0, sizeof(client_addr));
   socklen_t addrlen = sizeof(sockaddr_in);
@@ -342,6 +343,10 @@ int main(int argc [[maybe_unused]], char **argv)
       {
         AcceptHTTP2Client(context, fd);
       }
+      else
+      {
+        ECHIDNA_LOG_ERROR(context->_consoleLogger, "context expired");
+      }
       return 0;
     };
 
@@ -353,16 +358,19 @@ int main(int argc [[maybe_unused]], char **argv)
   else
   {
     ECHIDNA_LOG_ERROR(logger, "Failed to create http2 fd");
+    exit(EXIT_FAILURE);
   }
   // END HTTP2 service
 
-  // BEGIN grpc
   uint32_t msg_count = 0;
-  std::function<piapiac::msg::PiaMessage(piapiac::msg::PiaRequest &)> cb = [logger, &msg_count](piapiac::msg::PiaRequest &request [[maybe_unused]])
+
+  // BEGIN grpc
+  std::function<piapiac::msg::PiaMessage(piapiac::msg::PiaRequest &)> cb =
+      [logger, &msg_count](piapiac::msg::PiaRequest &request [[maybe_unused]])
   {
+    ECHIDNA_LOG_INFO(logger, "grpc request[{}]", request.DebugString());
     piapiac::msg::PiaMessage cMsg;
     cMsg.set_count(msg_count);
-    ECHIDNA_LOG_INFO(logger, "grpc request[{}]", request.DebugString());
     cMsg.set_title("foo");
     return cMsg;
   };
